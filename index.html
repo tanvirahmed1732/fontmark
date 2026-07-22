@@ -1,0 +1,1625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Preview your text in every font on your machine, shortlist favourites, and export or compare them.">
+<title>Fontmark</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128292;</text></svg>">
+</head>
+<body><style>
+  /* ============ §A tokens & themes ============ */
+  :root {
+    --paper: #F6F7F5;
+    --ink: #17191E;
+    --muted: #6C7280;
+    --line: #DCDFE2;
+    --accent: #2240BE;
+    --accent-ink: #FFFFFF;
+    --card: #FFFFFF;
+    --pos-bg: #FFFFFF;
+    --pos-ink: #1A1C21;
+    --neg-bg: #101114;
+    --neg-ink: #F2F3F5;
+    --danger: #B3261E;
+    --shadow: 0 8px 28px rgba(20, 24, 38, 0.12);
+    --mono: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+    --ui: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131518;
+      --ink: #E8EAEC;
+      --muted: #8B919E;
+      --line: #2A2E35;
+      --accent: #8FA3FF;
+      --accent-ink: #10142A;
+      --card: #1A1D22;
+      --danger: #F2B8B5;
+      --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #F6F7F5; --ink: #17191E; --muted: #6C7280; --line: #DCDFE2;
+    --accent: #2240BE; --accent-ink: #FFFFFF; --card: #FFFFFF; --danger: #B3261E;
+    --shadow: 0 8px 28px rgba(20, 24, 38, 0.12);
+  }
+  :root[data-theme="dark"] {
+    --paper: #131518; --ink: #E8EAEC; --muted: #8B919E; --line: #2A2E35;
+    --accent: #8FA3FF; --accent-ink: #10142A; --card: #1A1D22; --danger: #F2B8B5;
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--ui);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  button { font-family: var(--ui); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+
+  .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .pro {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 1px 6px 0;
+    vertical-align: 2px;
+    margin-left: 4px;
+  }
+
+  /* ============ top bar ============ */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+  .brand .tagline { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 10px; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  /* ============ buttons & inputs ============ */
+  .btn {
+    appearance: none;
+    background: var(--card);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn:disabled:hover { border-color: var(--line); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.on { border-color: var(--accent); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .btn.danger-armed { border-color: var(--danger); color: var(--danger); }
+
+  input[type="text"], input[type="search"] {
+    background: var(--card);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 11px;
+    font-size: 14px;
+    font-family: var(--ui);
+  }
+  input[type="text"]:hover, input[type="search"]:hover { border-color: var(--muted); }
+
+  input[type="range"] { accent-color: var(--accent); }
+  input[type="color"] {
+    width: 30px; height: 30px; padding: 2px;
+    border: 1px solid var(--line); border-radius: 7px;
+    background: var(--card); cursor: pointer;
+  }
+
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--card); }
+  .seg button {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    padding: 7px 11px; font-size: 13px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  /* ============ control bar ============ */
+  .controls {
+    position: sticky; top: 0; z-index: 30;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    padding: 12px 20px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  }
+  #previewText { flex: 1 1 260px; min-width: 180px; font-size: 15px; }
+  #searchBox { flex: 0 1 180px; min-width: 130px; }
+  .size-ctl { display: inline-flex; align-items: center; gap: 8px; }
+  .size-ctl input { width: 120px; }
+  .size-ctl .val { font-family: var(--mono); font-size: 11px; color: var(--muted); min-width: 40px; }
+  .color-ctl { display: inline-flex; align-items: center; gap: 6px; }
+  .ctl-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
+
+  /* ============ layout: grid + tray ============ */
+  .layout { display: block; }
+  .grid-wrap { padding: 18px 20px 80px; }
+  .grid-status { margin-bottom: 12px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .addname { display: inline-flex; gap: 6px; margin-left: auto; }
+  .addname input { width: 220px; padding: 5px 10px; font-size: 13px; }
+  .addname .btn { padding: 5px 11px; font-size: 13px; }
+
+  .grid {
+    --preview-size: 40px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    overflow: hidden;
+    cursor: pointer;
+    display: flex; flex-direction: column;
+    min-height: calc(var(--preview-size) * 1.5 + 66px);
+    content-visibility: auto;
+    contain-intrinsic-size: auto 160px;
+    transition: border-color 0.12s;
+    position: relative;
+  }
+  .card:hover { border-color: var(--muted); }
+  .card.selected { border-color: var(--accent); }
+  .card.selected::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--accent);
+  }
+  .card.hidden { display: none; }
+  .card-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px 8px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .card-head .fam {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .card-head .meta { font-family: var(--mono); font-size: 9px; letter-spacing: 0.07em; color: var(--muted); margin-left: auto; white-space: nowrap; }
+  .card-head .check { color: var(--accent); font-size: 12px; display: none; }
+  .card.selected .card-head .check { display: inline; }
+  .card .rm {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    font-size: 15px; line-height: 1; cursor: pointer; padding: 2px 4px; border-radius: 4px;
+  }
+  .card .rm:hover { color: var(--danger); }
+  .preview {
+    flex: 1;
+    padding: 16px 14px;
+    font-size: var(--preview-size);
+    line-height: 1.25;
+    background: var(--pos-bg);
+    color: var(--pv-ink, var(--pos-ink));
+    word-break: break-word;
+    overflow: hidden;
+    display: flex; align-items: center;
+  }
+  .grid.negative .preview, .compare-cols.negative .col-sample { background: var(--neg-bg); color: var(--pv-ink, var(--neg-ink)); }
+  .grid.case-upper .preview, .case-upper .col-sample, .case-upper .tray-name { text-transform: uppercase; }
+  .grid.case-lower .preview, .case-lower .col-sample, .case-lower .tray-name { text-transform: lowercase; }
+  .empty-state { color: var(--muted); padding: 40px 0; text-align: center; }
+
+  /* ============ tray (shortlist) ============ */
+  .tray {
+    background: var(--card);
+    border-left: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .tray-head { padding: 14px 16px 10px; display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--line); }
+  .tray-head .n { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
+  .tray-list { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1; min-height: 0; }
+  .tray-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 8px 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    cursor: grab;
+  }
+  .tray-row:hover { background: var(--paper); }
+  .tray-row.dragging { opacity: 0.4; }
+  .tray-row .grip { color: var(--muted); font-size: 12px; cursor: grab; user-select: none; }
+  .tray-row .tray-name { flex: 1; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tray-row.unavailable .tray-name { color: var(--muted); font-style: italic; font-family: var(--ui) !important; font-size: 13px; }
+  .tray-row .mv, .tray-row .tray-rm {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; font-size: 12px; padding: 3px 5px; border-radius: 4px;
+  }
+  .tray-row .tray-rm { font-size: 14px; }
+  .tray-row .mv:hover, .tray-row .tray-rm:hover { color: var(--ink); background: var(--line); }
+  @media (hover: hover) and (pointer: fine) {
+    .tray-row .mv { visibility: hidden; }
+    .tray-row:hover .mv, .tray-row .mv:focus-visible { visibility: visible; }
+  }
+  .drop-ind { height: 2px; background: var(--accent); border-radius: 2px; margin: 0 8px; }
+  .tray-empty { color: var(--muted); font-size: 13px; padding: 18px 16px; }
+  .tray-foot { border-top: 1px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .tray-foot .row { display: flex; gap: 8px; }
+  .tray-foot .row .btn { flex: 1; }
+  .save-form { display: none; flex-direction: column; gap: 8px; }
+  .save-form.open { display: flex; }
+  .save-form input { width: 100%; }
+
+  .fab {
+    position: fixed; right: 16px; bottom: 16px; z-index: 40;
+    display: none;
+    background: var(--accent); color: var(--accent-ink);
+    border: 0; border-radius: 999px;
+    padding: 12px 18px; font-size: 14px; font-weight: 600;
+    box-shadow: var(--shadow); cursor: pointer;
+  }
+
+  @media (min-width: 1100px) {
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: stretch; }
+    .tray { position: sticky; top: 57px; height: calc(100vh - 57px); }
+  }
+  @media (max-width: 1099px) {
+    .tray {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+      max-height: 70vh;
+      border-top: 1px solid var(--line); border-left: 0;
+      border-radius: 14px 14px 0 0;
+      box-shadow: var(--shadow);
+      transform: translateY(105%);
+      transition: transform 0.22s ease;
+    }
+    .tray.open { transform: translateY(0); }
+    .fab { display: block; }
+  }
+
+  /* ============ dialogs ============ */
+  dialog {
+    background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 0;
+    width: min(680px, calc(100vw - 32px));
+    max-height: min(82vh, 760px);
+  }
+  dialog::backdrop { background: rgba(10, 12, 18, 0.45); }
+  .dlg-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
+  .dlg-head h2 { margin: 0; font-size: 15px; font-weight: 650; }
+  .dlg-head .x { margin-left: auto; appearance: none; border: 0; background: transparent; color: var(--muted); font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 5px; }
+  .dlg-head .x:hover { color: var(--ink); background: var(--line); }
+  .dlg-body { padding: 14px 18px 18px; overflow-y: auto; max-height: calc(82vh - 60px); }
+
+  /* collections */
+  .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip {
+    appearance: none; cursor: pointer;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    border-radius: 999px; padding: 3px 10px;
+  }
+  .chip.on { border-color: var(--accent); color: var(--accent); }
+  .coll-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .coll-row { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .coll-row .info { flex: 1 1 200px; min-width: 0; }
+  .coll-row .cname { font-weight: 600; font-size: 14px; }
+  .coll-row .cname input { font-size: 14px; width: 100%; }
+  .coll-row .cmeta { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.05em; margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .coll-row .acts { display: flex; gap: 6px; }
+  .coll-row .acts .btn { padding: 5px 10px; font-size: 12px; }
+
+  /* export */
+  .export-body { display: flex; flex-direction: column; gap: 12px; }
+  .export-body textarea {
+    width: 100%; min-height: 110px; resize: vertical;
+    background: var(--paper); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 7px;
+    font-family: var(--mono); font-size: 12px; padding: 10px;
+  }
+  .export-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* compare */
+  #dlgCompare { width: min(1100px, calc(100vw - 32px)); }
+  .cmp-ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .cmp-ctl input[type="text"] { flex: 1 1 220px; }
+  .cmp-picker { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
+  .cmp-picker label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
+  .compare-cols { display: grid; gap: 12px; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
+  .col { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .col-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
+  .col-sample {
+    padding: 20px 16px; min-height: 140px;
+    background: var(--pos-bg); color: var(--pv-ink, var(--pos-ink));
+    font-size: var(--cmp-size, 72px); line-height: 1.15; word-break: break-word;
+  }
+  @media (max-width: 800px) { .compare-cols { grid-template-columns: 1fr; } }
+
+  /* upload overlay */
+  .dropzone {
+    position: fixed; inset: 0; z-index: 100;
+    display: none; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--paper) 82%, transparent);
+    border: 3px dashed var(--accent); border-radius: 14px; margin: 12px;
+    font-size: 20px; font-weight: 600; color: var(--accent);
+    pointer-events: none;
+  }
+  .dropzone.on { display: flex; }
+
+  /* toasts */
+  .toasts { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 120; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast {
+    background: var(--ink); color: var(--paper);
+    border-radius: 8px; padding: 9px 16px; font-size: 13px;
+    box-shadow: var(--shadow);
+    animation: toast-in 0.18s ease;
+  }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+</style>
+
+<!-- ============ §B markup ============ -->
+<header class="topbar">
+  <div class="brand">Fontmark<span class="tagline">preview &amp; shortlist type</span></div>
+  <div class="topbar-right">
+    <span id="srcStatus" class="label">Detecting fonts…</span>
+    <button id="btnLoadLocal" class="btn primary" hidden>Load all installed fonts</button>
+    <button id="btnUpload" class="btn">Upload fonts<span class="pro">PRO</span></button>
+  </div>
+</header>
+
+<div class="controls">
+  <input id="previewText" type="text" placeholder="Type a word or phrase — e.g. your brand name" autocomplete="off">
+  <div class="size-ctl">
+    <span class="label">Size</span>
+    <input id="sizeSlider" type="range" min="16" max="120" step="1" value="40" aria-label="Preview font size">
+    <span class="val" id="sizeVal">40px</span>
+  </div>
+  <div class="seg" id="caseSeg" role="group" aria-label="Letter case">
+    <button data-case="as-typed" aria-pressed="true" title="As typed">Aa</button>
+    <button data-case="upper" aria-pressed="false" title="Uppercase">AA</button>
+    <button data-case="lower" aria-pressed="false" title="Lowercase">aa</button>
+  </div>
+  <button id="btnNegative" class="btn" aria-pressed="false" title="White on black preview">Negative</button>
+  <div class="color-ctl">
+    <input id="colorPick" type="color" value="#1a1c21" aria-label="Preview text color">
+    <button id="colorReset" class="btn" title="Reset to automatic color" hidden>Auto</button>
+  </div>
+  <div class="ctl-sep" aria-hidden="true"></div>
+  <input id="searchBox" type="search" placeholder="Search fonts" autocomplete="off" aria-label="Search fonts by name">
+  <button id="btnIsolate" class="btn" aria-pressed="false" disabled>Isolate</button>
+  <button id="btnCompare" class="btn" disabled>Compare<span class="pro">PRO</span></button>
+  <button id="btnCollections" class="btn">Collections<span class="pro">PRO</span></button>
+  <button id="btnExport" class="btn" disabled>Export<span class="pro">PRO</span></button>
+</div>
+
+<div class="layout">
+  <div class="grid-wrap">
+    <div class="grid-status">
+      <span id="gridCount" class="label"></span>
+      <form id="addByName" class="addname">
+        <input id="addNameInput" type="text" placeholder="Add installed font by name…" autocomplete="off" aria-label="Add an installed font by its exact name">
+        <button type="submit" class="btn">Add</button>
+      </form>
+    </div>
+    <main id="grid" class="grid" aria-label="Font previews"></main>
+    <div id="gridEmpty" class="empty-state" hidden>No fonts match your search.</div>
+  </div>
+
+  <aside id="tray" class="tray" aria-label="Shortlist">
+    <div class="tray-head">
+      <strong>Shortlist</strong>
+      <span class="n" id="trayCount">0</span>
+    </div>
+    <ul id="trayList" class="tray-list"></ul>
+    <div id="trayEmpty" class="tray-empty">Click any font card to add it here, then drag to rank your favourites.</div>
+    <div class="tray-foot">
+      <div class="row">
+        <button id="btnSaveColl" class="btn" disabled>Save as collection<span class="pro">PRO</span></button>
+        <button id="btnClear" class="btn" disabled>Clear</button>
+      </div>
+      <form id="saveForm" class="save-form">
+        <input id="collName" type="text" placeholder="Collection name" autocomplete="off" required>
+        <input id="collTags" type="text" placeholder="Tags, comma separated (optional)" autocomplete="off">
+        <div class="row">
+          <button type="submit" class="btn primary">Save</button>
+          <button type="button" id="saveCancel" class="btn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </aside>
+</div>
+
+<button id="trayFab" class="fab" aria-label="Open shortlist">Shortlist · <span id="fabCount">0</span></button>
+
+<dialog id="dlgCollections" aria-label="Collections">
+  <div class="dlg-head"><h2>Collections<span class="pro">PRO</span></h2><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="dlg-body">
+    <div id="tagChips" class="tag-chips"></div>
+    <ul id="collList" class="coll-list"></ul>
+    <div id="collEmpty" class="empty-state">No collections yet. Shortlist some fonts, then “Save as collection”.</div>
+  </div>
+</dialog>
+
+<dialog id="dlgExport" aria-label="Export shortlist">
+  <div class="dlg-head"><h2>Export shortlist<span class="pro">PRO</span></h2><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="dlg-body export-body">
+    <span class="label" id="exportInfo"></span>
+    <div class="export-acts">
+      <button id="btnPng" class="btn primary">Download PNG</button>
+      <button id="btnCopy" class="btn">Copy font list</button>
+    </div>
+    <textarea id="exportText" readonly aria-label="Shortlisted font names"></textarea>
+  </div>
+</dialog>
+
+<dialog id="dlgCompare" aria-label="Compare fonts">
+  <div class="dlg-head"><h2>Compare<span class="pro">PRO</span></h2><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="dlg-body">
+    <div id="cmpPicker" class="cmp-picker"></div>
+    <div class="cmp-ctl">
+      <input id="cmpText" type="text" placeholder="Sample text" autocomplete="off">
+      <span class="label">Size</span>
+      <input id="cmpSize" type="range" min="24" max="200" step="1" value="72" aria-label="Compare font size">
+      <span class="val label" id="cmpSizeVal">72px</span>
+    </div>
+    <div id="cmpCols" class="compare-cols"></div>
+  </div>
+</dialog>
+
+<div id="dropzone" class="dropzone">Drop font files to preview them (.ttf .otf .woff .woff2)</div>
+<input id="fileInput" type="file" accept=".ttf,.otf,.woff,.woff2" multiple hidden>
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+<template id="tplCard">
+  <div class="card" role="button" tabindex="0" aria-pressed="false">
+    <div class="card-head">
+      <span class="check" aria-hidden="true">✓</span>
+      <span class="fam"></span>
+      <span class="meta"></span>
+      <button class="rm" hidden aria-label="Remove uploaded font">×</button>
+    </div>
+    <div class="preview"></div>
+  </div>
+</template>
+
+<template id="tplTrayRow">
+  <li class="tray-row" draggable="true">
+    <span class="grip" aria-hidden="true">⠿</span>
+    <span class="tray-name"></span>
+    <button class="mv up" title="Move up">▲</button>
+    <button class="mv down" title="Move down">▼</button>
+    <button class="tray-rm" title="Remove from shortlist">×</button>
+  </li>
+</template>
+
+<template id="tplCollRow">
+  <li class="coll-row">
+    <div class="info">
+      <div class="cname"></div>
+      <div class="cmeta"></div>
+    </div>
+    <div class="acts">
+      <button class="btn load">Load</button>
+      <button class="btn rename">Rename</button>
+      <button class="btn del">Delete</button>
+    </div>
+  </li>
+</template>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============ (1) Util ============ */
+  const $ = (sel) => document.querySelector(sel);
+  const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+  const uid = () => 'c_' + Math.random().toString(36).slice(2, 9);
+  const toastsEl = $('#toasts');
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    toastsEl.appendChild(el);
+    setTimeout(() => el.remove(), 2600);
+  }
+
+  /* ============ (2) Store ============ */
+  const PERSISTED = ['previewText', 'fontSize', 'caseMode', 'negative', 'textColor', 'shortlist', 'collections'];
+  const Store = (() => {
+    const state = {
+      fonts: [],            // [{family, source:'probed'|'local'|'uploaded', styles?}]
+      fontSource: 'idle',
+      search: '',
+      isolate: false,
+      previewText: '',
+      fontSize: 40,
+      caseMode: 'as-typed',
+      negative: false,
+      textColor: null,
+      shortlist: [],
+      collections: []
+    };
+    const listeners = [];
+    function load() {
+      try {
+        const raw = localStorage.getItem('fontmark.v1');
+        if (!raw) return;
+        const d = JSON.parse(raw);
+        if (!d || d.version !== 1) return;
+        const s = d.settings || {};
+        if (typeof s.previewText === 'string') state.previewText = s.previewText;
+        if (typeof s.fontSize === 'number') state.fontSize = Math.min(120, Math.max(16, s.fontSize));
+        if (['as-typed', 'upper', 'lower'].includes(s.caseMode)) state.caseMode = s.caseMode;
+        state.negative = !!s.negative;
+        if (typeof s.textColor === 'string') state.textColor = s.textColor;
+        if (Array.isArray(d.shortlist)) state.shortlist = d.shortlist.filter(x => typeof x === 'string');
+        if (Array.isArray(d.collections)) state.collections = d.collections.filter(c => c && c.name && Array.isArray(c.fonts));
+      } catch (e) { /* corrupt or blocked storage — start fresh */ }
+    }
+    const save = debounce(() => {
+      try {
+        localStorage.setItem('fontmark.v1', JSON.stringify({
+          version: 1,
+          settings: {
+            previewText: state.previewText, fontSize: state.fontSize, caseMode: state.caseMode,
+            negative: state.negative, textColor: state.textColor
+          },
+          shortlist: state.shortlist,
+          collections: state.collections
+        }));
+      } catch (e) { /* storage blocked in sandbox — session-only mode */ }
+    }, 250);
+    function set(patch) {
+      Object.assign(state, patch);
+      const keys = Object.keys(patch);
+      if (keys.some(k => PERSISTED.includes(k))) save();
+      listeners.forEach(fn => fn(keys));
+    }
+    return { state, set, load, subscribe: fn => listeners.push(fn) };
+  })();
+  const S = Store.state;
+
+  /* ============ (3) Curated font list ============ */
+  // Variant codes: R regular · I italic · B bold(700) · L light(300) · SL semilight(350)
+  // M medium(500) · SB semibold(600) · BL black(900) · C condensed · SC semi-condensed
+  // Space-separated codes combine: 'B I' = Bold Italic, 'SB C' = SemiBold Condensed.
+  const VCSS = {
+    B: { w: 700 }, L: { w: 300 }, SL: { w: 350 }, M: { w: 500 }, SB: { w: 600 }, BL: { w: 900 },
+    I: { i: 1 }, C: { st: 'condensed' }, SC: { st: 'semi-condensed' }
+  };
+  const VNAME = {
+    B: 'Bold', L: 'Light', SL: 'SemiLight', M: 'Medium', SB: 'SemiBold', BL: 'Black',
+    I: 'Italic', C: 'Condensed', SC: 'SemiCondensed'
+  };
+  const CURATED = [
+    // Windows 11 defaults
+    ['Arial', 'R,I,B,B I'], ['Arial Black', 'R'], ['Arial Narrow', 'R,I,B,B I'],
+    ['Bahnschrift', 'R,B,B C,B SC,C,L,L C,L SC,SB,SB C,SB SC,SC,SL,SL C,SL SC'],
+    ['Calibri', 'R,I,B,B I,L,L I'], ['Cambria', 'R,I,B,B I'], ['Candara', 'R,I,B,B I,L,L I'],
+    ['Cascadia Code', 'R,I,B,B I,L,L I,SB,SB I'], ['Cascadia Mono', 'R,I,B,B I,L,L I,SB,SB I'],
+    ['Comic Sans MS', 'R,I,B,B I'], ['Consolas', 'R,I,B,B I'], ['Constantia', 'R,I,B,B I'],
+    ['Corbel', 'R,I,B,B I,L,L I'], ['Courier New', 'R,I,B,B I'], ['Ebrima', 'R,B'],
+    ['Franklin Gothic Medium', 'R,I'], ['Gabriola', 'R'], ['Gadugi', 'R,B'],
+    ['Georgia', 'R,I,B,B I'], ['Impact', 'R'], ['Ink Free', 'R'], ['Javanese Text', 'R'],
+    ['Leelawadee UI', 'R,SL,B'], ['Lucida Console', 'R'], ['Lucida Sans Unicode', 'R'],
+    ['Malgun Gothic', 'R,SL,B'], ['Microsoft Himalaya', 'R'], ['Microsoft JhengHei', 'R,L,B'],
+    ['Microsoft JhengHei UI', 'R,L,B'], ['Microsoft New Tai Lue', 'R,B'],
+    ['Microsoft PhagsPa', 'R,B'], ['Microsoft Sans Serif', 'R'], ['Microsoft Tai Le', 'R,B'],
+    ['Microsoft YaHei', 'R,L,B'], ['Microsoft YaHei UI', 'R,L,B'], ['Microsoft Yi Baiti', 'R'],
+    ['MingLiU-ExtB', 'R'], ['Mongolian Baiti', 'R'], ['MS Gothic', 'R'], ['MS PGothic', 'R'],
+    ['MS UI Gothic', 'R'], ['MV Boli', 'R'], ['Myanmar Text', 'R,B'], ['Nirmala UI', 'R,SL,B'],
+    ['NSimSun', 'R'], ['Palatino Linotype', 'R,I,B,B I'], ['Segoe Fluent Icons', 'R'],
+    ['Segoe MDL2 Assets', 'R'], ['Segoe Print', 'R,B'], ['Segoe Script', 'R,B'],
+    ['Segoe UI', 'R,I,B,B I,BL,BL I,L,L I,SB,SB I,SL,SL I'],
+    ['Segoe UI Emoji', 'R'], ['Segoe UI Historic', 'R'], ['Segoe UI Symbol', 'R'],
+    ['Segoe UI Variable Display', 'R,L,SB,B'], ['Segoe UI Variable Small', 'R,L,SB,B'],
+    ['Segoe UI Variable Text', 'R,L,SB,B'], ['SimSun', 'R'], ['SimSun-ExtB', 'R'],
+    ['Sitka Banner', 'R,I,B,B I'], ['Sitka Display', 'R,I,B,B I'], ['Sitka Heading', 'R,I,B,B I'],
+    ['Sitka Small', 'R,I,B,B I'], ['Sitka Subheading', 'R,I,B,B I'], ['Sitka Text', 'R,I,B,B I'],
+    ['Sylfaen', 'R'], ['Symbol', 'R'], ['Tahoma', 'R,B'], ['Times New Roman', 'R,I,B,B I'],
+    ['Trebuchet MS', 'R,I,B,B I'], ['Verdana', 'R,I,B,B I'], ['Webdings', 'R'],
+    ['Wingdings', 'R'], ['Wingdings 2', 'R'], ['Wingdings 3', 'R'],
+    ['Yu Gothic', 'R,L,M,B'], ['Yu Gothic UI', 'R,SL,L,SB,B'],
+    // Windows / Office extras
+    ['Agency FB', 'R,B'], ['Algerian', 'R'], ['Baskerville Old Face', 'R'], ['Bauhaus 93', 'R'],
+    ['Bell MT', 'R,I,B'], ['Berlin Sans FB', 'R,B'], ['Berlin Sans FB Demi', 'R'],
+    ['Bernard MT Condensed', 'R'], ['Blackadder ITC', 'R'],
+    ['Bodoni MT', 'R,I,B,B I'], ['Bodoni MT Black', 'R'], ['Bodoni MT Condensed', 'R,I,B'],
+    ['Bodoni MT Poster Compressed', 'R'], ['Book Antiqua', 'R,I,B,B I'],
+    ['Bookman Old Style', 'R,I,B,B I'], ['Bradley Hand ITC', 'R'], ['Britannic Bold', 'R'],
+    ['Broadway', 'R'], ['Brush Script MT', 'R'], ['Californian FB', 'R,I,B'],
+    ['Calisto MT', 'R,I,B,B I'], ['Castellar', 'R'], ['Centaur', 'R'], ['Century', 'R'],
+    ['Century Gothic', 'R,I,B,B I'], ['Century Schoolbook', 'R,I,B,B I'], ['Chiller', 'R'],
+    ['Colonna MT', 'R'], ['Cooper Black', 'R'], ['Copperplate Gothic Bold', 'R'],
+    ['Copperplate Gothic Light', 'R'], ['Curlz MT', 'R'], ['Dubai', 'R,L,M,B'],
+    ['Edwardian Script ITC', 'R'], ['Elephant', 'R,I'], ['Engravers MT', 'R'],
+    ['Eras Bold ITC', 'R'], ['Eras Demi ITC', 'R'], ['Eras Light ITC', 'R'],
+    ['Eras Medium ITC', 'R'], ['Felix Titling', 'R'], ['Footlight MT Light', 'R'],
+    ['Forte', 'R'], ['Franklin Gothic Book', 'R,I'], ['Franklin Gothic Demi', 'R,I'],
+    ['Franklin Gothic Demi Cond', 'R'], ['Franklin Gothic Heavy', 'R,I'],
+    ['Franklin Gothic Medium Cond', 'R'], ['Freestyle Script', 'R'], ['French Script MT', 'R'],
+    ['Garamond', 'R,I,B'], ['Gigi', 'R'], ['Gill Sans MT', 'R,I,B,B I'],
+    ['Gill Sans MT Condensed', 'R'], ['Gill Sans Ultra Bold', 'R'],
+    ['Gill Sans Ultra Bold Condensed', 'R'], ['Gloucester MT Extra Condensed', 'R'],
+    ['Goudy Old Style', 'R,I,B'], ['Goudy Stout', 'R'], ['Haettenschweiler', 'R'],
+    ['Harlow Solid Italic', 'R'], ['Harrington', 'R'], ['High Tower Text', 'R,I'],
+    ['Imprint MT Shadow', 'R'], ['Informal Roman', 'R'], ['Jokerman', 'R'], ['Juice ITC', 'R'],
+    ['Kristen ITC', 'R'], ['Kunstler Script', 'R'], ['Lucida Bright', 'R,I,B,B I'],
+    ['Lucida Calligraphy', 'R'], ['Lucida Fax', 'R,I,B,B I'], ['Lucida Handwriting', 'R'],
+    ['Lucida Sans', 'R,I,B,B I'], ['Lucida Sans Typewriter', 'R,I,B,B I'], ['Magneto', 'R'],
+    ['Maiandra GD', 'R'], ['Matura MT Script Capitals', 'R'], ['Mistral', 'R'],
+    ['Modern No. 20', 'R'], ['Monotype Corsiva', 'R'], ['Niagara Engraved', 'R'],
+    ['Niagara Solid', 'R'], ['OCR A Extended', 'R'], ['Old English Text MT', 'R'],
+    ['Onyx', 'R'], ['Palace Script MT', 'R'], ['Papyrus', 'R'], ['Parchment', 'R'],
+    ['Perpetua', 'R,I,B,B I'], ['Perpetua Titling MT', 'R,L,B'], ['Playbill', 'R'],
+    ['Poor Richard', 'R'], ['Pristina', 'R'], ['Rage Italic', 'R'], ['Ravie', 'R'],
+    ['Rockwell', 'R,I,B,B I'], ['Rockwell Condensed', 'R,B'], ['Rockwell Extra Bold', 'R'],
+    ['Script MT Bold', 'R'], ['Showcard Gothic', 'R'], ['Snap ITC', 'R'], ['Stencil', 'R'],
+    ['Tempus Sans ITC', 'R'], ['Tw Cen MT', 'R,I,B,B I'], ['Tw Cen MT Condensed', 'R,B'],
+    ['Tw Cen MT Condensed Extra Bold', 'R'], ['Viner Hand ITC', 'R'], ['Vivaldi', 'R'],
+    ['Vladimir Script', 'R'], ['Wide Latin', 'R'],
+    // macOS
+    ['American Typewriter', 'R,L,B'], ['Andale Mono', 'R'], ['Arial Rounded MT Bold', 'R'],
+    ['Avenir', 'R,I,L,M,B,BL'], ['Avenir Next', 'R,I,M,SB,B,B I'],
+    ['Avenir Next Condensed', 'R,M,B'], ['Baskerville', 'R,I,SB,B'], ['Big Caslon', 'R'],
+    ['Bodoni 72', 'R,I,B'], ['Bradley Hand', 'R'], ['Chalkboard SE', 'R,L,B'],
+    ['Chalkduster', 'R'], ['Charter', 'R,I,B,BL'], ['Cochin', 'R,I,B'],
+    ['Copperplate', 'R,L,B'], ['Courier', 'R,B'], ['Didot', 'R,I,B'], ['Futura', 'R,M,B'],
+    ['Geneva', 'R'], ['Gill Sans', 'R,I,L,SB,B'], ['Helvetica', 'R,I,L,B,B I'],
+    ['Helvetica Neue', 'R,I,L,M,B,B I'], ['Herculanum', 'R'], ['Hoefler Text', 'R,I,B,B I'],
+    ['Lucida Grande', 'R,B'], ['Luminari', 'R'], ['Marker Felt', 'R'], ['Menlo', 'R,I,B,B I'],
+    ['Monaco', 'R'], ['Noteworthy', 'R,L,B'], ['Optima', 'R,I,B,BL'],
+    ['Palatino', 'R,I,B,B I'], ['Phosphate', 'R'], ['SF Mono', 'R,M,SB,B'],
+    ['SF Pro Display', 'R,M,SB,B'], ['SF Pro Text', 'R,M,SB,B'], ['Seravek', 'R,I,L,M,B'],
+    ['SignPainter', 'R'], ['Skia', 'R'], ['Snell Roundhand', 'R,B,BL'],
+    ['Superclarendon', 'R,I,B'], ['Trattatello', 'R'], ['Zapfino', 'R'],
+    // Linux
+    ['Cantarell', 'R,B'], ['DejaVu Sans', 'R,I,B,B I'], ['DejaVu Sans Mono', 'R,I,B,B I'],
+    ['DejaVu Serif', 'R,I,B,B I'], ['FreeMono', 'R'], ['FreeSans', 'R'], ['FreeSerif', 'R'],
+    ['Liberation Mono', 'R,I,B,B I'], ['Liberation Sans', 'R,I,B,B I'],
+    ['Liberation Serif', 'R,I,B,B I'], ['Nimbus Roman', 'R'], ['Nimbus Sans', 'R'],
+    ['Noto Sans', 'R,I,B,B I'], ['Noto Serif', 'R,I,B,B I'], ['Ubuntu', 'R,I,L,M,B,B I'],
+    ['Ubuntu Condensed', 'R'], ['Ubuntu Mono', 'R,I,B,B I'],
+    // Common installs (Google Fonts locally installed, dev fonts, etc.)
+    ['Roboto', 'R,I,L,M,B,B I,BL'], ['Roboto Condensed', 'R,B'], ['Roboto Mono', 'R,I,B'],
+    ['Open Sans', 'R,I,L,SB,B,B I'], ['Lato', 'R,I,L,B,BL'],
+    ['Montserrat', 'R,I,L,M,SB,B,BL'], ['Source Sans Pro', 'R,I,L,SB,B'],
+    ['Source Sans 3', 'R,I,L,SB,B'], ['Source Code Pro', 'R,B'], ['Fira Code', 'R,L,M,SB,B'],
+    ['Fira Sans', 'R,I,L,M,SB,B'], ['JetBrains Mono', 'R,I,L,M,SB,B'],
+    ['Inter', 'R,L,M,SB,B,BL'], ['Poppins', 'R,I,L,M,SB,B'], ['Nunito', 'R,I,L,SB,B,BL'],
+    ['Raleway', 'R,I,L,M,SB,B'], ['Merriweather', 'R,I,L,B,BL'],
+    ['Playfair Display', 'R,I,M,SB,B,BL'], ['Oswald', 'R,L,M,SB,B'],
+    ['PT Sans', 'R,I,B,B I'], ['PT Serif', 'R,I,B,B I'], ['Work Sans', 'R,I,L,M,SB,B'],
+    ['IBM Plex Sans', 'R,I,L,M,SB,B'], ['IBM Plex Serif', 'R,I,L,M,SB,B'],
+    ['IBM Plex Mono', 'R,I,L,M,SB,B'], ['Inconsolata', 'R,B'], ['Hack', 'R,I,B,B I'],
+    ['Victor Mono', 'R,I,B'], ['Comfortaa', 'R,L,B'], ['Quicksand', 'R,L,M,SB,B'],
+    ['Josefin Sans', 'R,I,L,SB,B'], ['Bebas Neue', 'R'], ['Anton', 'R'],
+    ['Abril Fatface', 'R'], ['Pacifico', 'R'], ['Lobster', 'R'],
+    ['Dancing Script', 'R,M,SB,B'], ['Caveat', 'R,M,SB,B']
+  ];
+
+  // Expand one curated row into per-variant font entries.
+  function variantEntries(family, codesCsv) {
+    return codesCsv.split(',').map(v => {
+      const codes = v.trim().split(' ').filter(c => c && c !== 'R');
+      const entry = { label: family, family, weight: 400, style: 'normal', stretch: 'normal', source: 'probed' };
+      const words = [];
+      for (const c of codes) {
+        const def = VCSS[c];
+        if (!def) continue;
+        if (def.w) entry.weight = def.w;
+        if (def.i) entry.style = 'italic';
+        if (def.st) entry.stretch = def.st;
+        words.push(VNAME[c]);
+      }
+      if (words.length) entry.label = family + ' ' + words.join(' ');
+      return entry;
+    });
+  }
+
+  // Apply a font entry's face to a DOM element / a canvas context.
+  function applyFont(el, f) {
+    el.style.fontFamily = '"' + f.family.replace(/"/g, '') + '"';
+    el.style.fontWeight = f.weight && f.weight !== 400 ? String(f.weight) : '';
+    el.style.fontStyle = f.style === 'italic' ? 'italic' : '';
+    el.style.fontStretch = f.stretch && f.stretch !== 'normal' ? f.stretch : '';
+  }
+  function setCanvasFont(ctx, size, f) {
+    const fam = '"' + f.family.replace(/"/g, '') + '"';
+    const style = f.style === 'italic' ? 'italic ' : '';
+    const weight = f.weight && f.weight !== 400 ? f.weight + ' ' : '';
+    const stretch = f.stretch && f.stretch !== 'normal' ? f.stretch + ' ' : '';
+    const before = ctx.font;
+    ctx.font = style + weight + stretch + size + 'px ' + fam;
+    if (ctx.font === before) ctx.font = style + weight + size + 'px ' + fam;
+    if (ctx.font === before) ctx.font = size + 'px ' + fam;
+  }
+  function cssFontString(size, f) {
+    const fam = '"' + f.family.replace(/"/g, '') + '"';
+    return (f.style === 'italic' ? 'italic ' : '') +
+      (f.weight && f.weight !== 400 ? f.weight + ' ' : '') + size + 'px ' + fam;
+  }
+
+  /* ============ (4) FontLoader ============ */
+  const FontLoader = (() => {
+    const uploads = new Map(); // family -> FontFace
+    let probeFn = null;
+    function probeOne(name) {
+      if (!probeFn) probeFn = makeProbe();
+      return probeFn(name);
+    }
+
+    function makeProbe() {
+      const c = document.createElement('canvas');
+      const ctx = c.getContext('2d');
+      const SAMPLE = 'mmMwWLliI0O&1@—';
+      const GENERICS = ['monospace', 'serif', 'sans-serif'];
+      const base = {};
+      for (const g of GENERICS) {
+        ctx.font = '72px ' + g;
+        base[g] = ctx.measureText(SAMPLE).width;
+      }
+      return (family) => {
+        const fam = '"' + family.replace(/"/g, '') + '"';
+        for (const g of GENERICS) {
+          ctx.font = '72px ' + fam + ', ' + g;
+          if (Math.abs(ctx.measureText(SAMPLE).width - base[g]) > 0.5) return true;
+        }
+        return false;
+      };
+    }
+
+    function probeCurated() {
+      Store.set({ fontSource: 'probing' });
+      const probe = makeProbe();
+      const queue = CURATED.slice();
+      const found = [];
+      const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
+      function chunk() {
+        const batch = queue.splice(0, 25);
+        for (const [fam, codes] of batch) if (probe(fam)) found.push(...variantEntries(fam, codes));
+        if (queue.length) {
+          renderStatusCount(found.length);
+          idle(chunk);
+        } else {
+          found.sort((a, b) => a.label.localeCompare(b.label));
+          Store.set({ fonts: withUploadsFirst(found), fontSource: 'probed' });
+        }
+      }
+      idle(chunk);
+    }
+
+    function renderStatusCount(n) {
+      const el = $('#srcStatus');
+      if (el && S.fontSource === 'probing') el.textContent = 'Detecting fonts… ' + n;
+    }
+
+    function withUploadsFirst(list) {
+      const up = [...uploads.keys()].map(f => ({ label: f, family: f, source: 'uploaded' }));
+      return up.concat(list.filter(f => f.source !== 'uploaded'));
+    }
+
+    async function loadLocalFonts() {
+      try {
+        const data = await window.queryLocalFonts();
+        // One entry per installed STYLE (like wordmark.it): render each exactly
+        // via an @font-face alias pointing at the local face by full/postscript name.
+        const seen = new Set();
+        const rules = [];
+        const list = [];
+        let i = 0;
+        for (const f of data) {
+          const style = f.style && f.style !== 'Regular' ? ' ' + f.style : '';
+          const label = f.fullName || (f.family + style);
+          if (seen.has(label)) continue;
+          seen.add(label);
+          const alias = 'fmlocal' + (i++);
+          const srcs = [];
+          if (f.postscriptName) srcs.push('local("' + f.postscriptName.replace(/"/g, '') + '")');
+          if (f.fullName) srcs.push('local("' + f.fullName.replace(/"/g, '') + '")');
+          if (!srcs.length) srcs.push('local("' + f.family.replace(/"/g, '') + '")');
+          rules.push('@font-face{font-family:"' + alias + '";src:' + srcs.join(',') + ';}');
+          list.push({ label, family: alias, source: 'local' });
+        }
+        if (!list.length) { toast('No fonts returned — permission may be blocked here.'); return; }
+        list.sort((a, b) => a.label.localeCompare(b.label));
+        let styleEl = document.getElementById('fmLocalFaces');
+        if (!styleEl) {
+          styleEl = document.createElement('style');
+          styleEl.id = 'fmLocalFaces';
+          (document.head || document.body).appendChild(styleEl);
+        }
+        styleEl.textContent = rules.join('\n');
+        Store.set({ fonts: withUploadsFirst(list), fontSource: 'local' });
+        $('#btnLoadLocal').hidden = true;
+        toast('Loaded ' + list.length + ' installed fonts');
+      } catch (e) {
+        if (e && e.name === 'NotAllowedError') {
+          toast('Permission was denied — click the button again to re-try.');
+        } else {
+          // SecurityError etc.: the embedding sandbox blocks the Local Font Access
+          // API entirely, so retrying can never succeed — remove the dead button.
+          $('#btnLoadLocal').hidden = true;
+          toast('This page’s sandbox blocks reading installed fonts — the detected set covers standard fonts; add any missing one by name below.');
+        }
+      }
+    }
+
+    async function addUpload(file) {
+      const okExt = /\.(ttf|otf|woff2?)$/i.test(file.name);
+      if (!okExt) { toast('Skipped ' + file.name + ' — not a font file'); return; }
+      let family = file.name.replace(/\.(ttf|otf|woff2?)$/i, '').replace(/[_-]+/g, ' ').trim() || 'Uploaded font';
+      const existing = new Set(S.fonts.map(f => f.label));
+      let name = family, n = 2;
+      while (existing.has(name) || uploads.has(name)) name = family + ' (' + (n++) + ')';
+      try {
+        const buf = await file.arrayBuffer();
+        const face = new FontFace(name, buf);
+        await face.load();
+        document.fonts.add(face);
+        uploads.set(name, face);
+        Store.set({ fonts: [{ label: name, family: name, source: 'uploaded' }].concat(S.fonts) });
+        toast('Added ' + name);
+      } catch (e) {
+        toast('Couldn’t read ' + file.name + ' — is it a valid font file?');
+      }
+    }
+
+    function removeUpload(label) {
+      const face = uploads.get(label);
+      if (face) { try { document.fonts.delete(face); } catch (e) {} }
+      uploads.delete(label);
+      Store.set({
+        fonts: S.fonts.filter(f => f.label !== label),
+        shortlist: S.shortlist.filter(f => f !== label)
+      });
+    }
+
+    return { probeCurated, probeOne, loadLocalFonts, addUpload, removeUpload, isUpload: f => uploads.has(f) };
+  })();
+
+  /* ============ (5) Grid ============ */
+  const Grid = (() => {
+    const grid = $('#grid');
+    const tplCard = $('#tplCard');
+    let io = null;
+    let buildToken = 0;
+
+    function displayText(label) {
+      const t = S.previewText.trim();
+      return t || label;
+    }
+
+    function ensureIO() {
+      if (io) io.disconnect();
+      io = new IntersectionObserver((entries) => {
+        for (const en of entries) {
+          if (!en.isIntersecting) continue;
+          const card = en.target;
+          hydrate(card);
+          io.unobserve(card);
+        }
+      }, { rootMargin: '800px 0px' });
+    }
+
+    function hydrate(card) {
+      const font = card._font;
+      const pv = card.querySelector('.preview');
+      applyFont(pv, font);
+      pv.textContent = displayText(font.label);
+      card.dataset.hydrated = '1';
+    }
+
+    function makeCard(font) {
+      const card = tplCard.content.firstElementChild.cloneNode(true);
+      card.dataset.label = font.label;
+      card._font = font;
+      card.querySelector('.fam').textContent = font.label;
+      const meta = card.querySelector('.meta');
+      if (font.source === 'uploaded') {
+        meta.textContent = 'UPLOADED';
+        card.querySelector('.rm').hidden = false;
+      } else {
+        meta.textContent = '';
+      }
+      if (S.shortlist.includes(font.label)) {
+        card.classList.add('selected');
+        card.setAttribute('aria-pressed', 'true');
+      }
+      return card;
+    }
+
+    function visibleFonts() {
+      if (!S.isolate) return S.fonts;
+      const byLabel = new Map(S.fonts.map(f => [f.label, f]));
+      return S.shortlist.map(f => byLabel.get(f)).filter(Boolean);
+    }
+
+    function rebuild() {
+      const token = ++buildToken;
+      grid.innerHTML = '';
+      ensureIO();
+      const list = visibleFonts();
+      let i = 0;
+      function chunk() {
+        if (token !== buildToken) return;
+        const frag = document.createDocumentFragment();
+        const end = Math.min(i + 300, list.length);
+        for (; i < end; i++) {
+          const card = makeCard(list[i]);
+          frag.appendChild(card);
+          io.observe(card);
+        }
+        grid.appendChild(frag);
+        if (i < list.length) requestAnimationFrame(chunk);
+        else applySearch();
+      }
+      chunk();
+      updateCount();
+    }
+
+    function updateText() {
+      grid.querySelectorAll('[data-hydrated]').forEach(card => {
+        card.querySelector('.preview').textContent = displayText(card.dataset.label);
+      });
+    }
+
+    function applySearch() {
+      const q = S.search.trim().toLowerCase();
+      let shown = 0;
+      grid.querySelectorAll('.card').forEach(card => {
+        const hit = !q || card.dataset.label.toLowerCase().includes(q);
+        card.classList.toggle('hidden', !hit);
+        if (hit) shown++;
+      });
+      $('#gridEmpty').hidden = shown !== 0 || !grid.children.length;
+      updateCount(shown);
+    }
+
+    function updateCount(shown) {
+      const total = visibleFonts().length;
+      const q = S.search.trim();
+      let txt;
+      if (q && typeof shown === 'number') txt = shown + ' of ' + total + ' fonts';
+      else txt = total + ' fonts' + (S.isolate ? ' · isolated' : '');
+      $('#gridCount').textContent = txt;
+    }
+
+    function syncSelected() {
+      const set = new Set(S.shortlist);
+      grid.querySelectorAll('.card').forEach(card => {
+        const on = set.has(card.dataset.label);
+        card.classList.toggle('selected', on);
+        card.setAttribute('aria-pressed', String(on));
+      });
+    }
+
+    function applyView() {
+      grid.style.setProperty('--preview-size', S.fontSize + 'px');
+      grid.classList.toggle('negative', S.negative);
+      grid.classList.toggle('case-upper', S.caseMode === 'upper');
+      grid.classList.toggle('case-lower', S.caseMode === 'lower');
+      if (S.textColor) grid.style.setProperty('--pv-ink', S.textColor);
+      else grid.style.removeProperty('--pv-ink');
+    }
+
+    // interactions (event delegation)
+    grid.addEventListener('click', (e) => {
+      const rm = e.target.closest('.rm');
+      const card = e.target.closest('.card');
+      if (!card) return;
+      if (rm) { FontLoader.removeUpload(card.dataset.label); return; }
+      Shortlist.toggle(card.dataset.label);
+    });
+    grid.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const card = e.target.closest('.card');
+      if (!card) return;
+      e.preventDefault();
+      Shortlist.toggle(card.dataset.label);
+    });
+
+    return { rebuild, updateText, applySearch, syncSelected, applyView, displayText };
+  })();
+
+  /* ============ (6) Shortlist / tray ============ */
+  const Shortlist = (() => {
+    const listEl = $('#trayList');
+    const tplRow = $('#tplTrayRow');
+    let dragIndex = -1;
+    let dropIndex = -1;
+    const dropInd = document.createElement('li');
+    dropInd.className = 'drop-ind';
+
+    function toggle(family) {
+      const cur = S.shortlist;
+      const next = cur.includes(family) ? cur.filter(f => f !== family) : cur.concat(family);
+      Store.set({ shortlist: next });
+    }
+
+    function move(from, to) {
+      const next = S.shortlist.slice();
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      Store.set({ shortlist: next });
+    }
+
+    function render() {
+      const byLabel = new Map(S.fonts.map(f => [f.label, f]));
+      listEl.innerHTML = '';
+      S.shortlist.forEach((fam, i) => {
+        const row = tplRow.content.firstElementChild.cloneNode(true);
+        row.dataset.family = fam;
+        row.dataset.index = i;
+        const name = row.querySelector('.tray-name');
+        const entry = byLabel.get(fam);
+        if (entry) {
+          name.textContent = fam;
+          applyFont(name, entry);
+        } else {
+          row.classList.add('unavailable');
+          name.textContent = fam + ' — not available on this device';
+          row.draggable = false;
+        }
+        row.querySelector('.up').disabled = i === 0;
+        row.querySelector('.down').disabled = i === S.shortlist.length - 1;
+        listEl.appendChild(row);
+      });
+      $('#trayEmpty').style.display = S.shortlist.length ? 'none' : '';
+      $('#trayCount').textContent = S.shortlist.length;
+      $('#fabCount').textContent = S.shortlist.length;
+      const n = S.shortlist.length;
+      $('#btnIsolate').disabled = n === 0 && !S.isolate;
+      $('#btnCompare').disabled = n < 2;
+      $('#btnExport').disabled = n === 0;
+      $('#btnSaveColl').disabled = n === 0;
+      $('#btnClear').disabled = n === 0;
+    }
+
+    // clicks
+    listEl.addEventListener('click', (e) => {
+      const row = e.target.closest('.tray-row');
+      if (!row) return;
+      const i = Number(row.dataset.index);
+      if (e.target.closest('.tray-rm')) toggle(row.dataset.family);
+      else if (e.target.closest('.up') && i > 0) move(i, i - 1);
+      else if (e.target.closest('.down') && i < S.shortlist.length - 1) move(i, i + 1);
+    });
+
+    // drag reorder
+    listEl.addEventListener('dragstart', (e) => {
+      const row = e.target.closest('.tray-row');
+      if (!row) return;
+      dragIndex = Number(row.dataset.index);
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', row.dataset.family); } catch (err) {}
+    });
+    listEl.addEventListener('dragover', (e) => {
+      if (dragIndex < 0) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rows = [...listEl.querySelectorAll('.tray-row')];
+      dropIndex = rows.length;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i].getBoundingClientRect();
+        if (e.clientY < r.top + r.height / 2) { dropIndex = i; break; }
+      }
+      const ref = rows[dropIndex] || null;
+      listEl.insertBefore(dropInd, ref);
+    });
+    listEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (dragIndex >= 0 && dropIndex >= 0) {
+        let to = dropIndex;
+        if (to > dragIndex) to--;
+        if (to !== dragIndex) move(dragIndex, to);
+      }
+    });
+    listEl.addEventListener('dragend', () => {
+      dragIndex = -1; dropIndex = -1;
+      dropInd.remove();
+      listEl.querySelectorAll('.dragging').forEach(r => r.classList.remove('dragging'));
+    });
+
+    return { toggle, render };
+  })();
+
+  /* ============ (7) Collections [PRO] ============ */
+  const Collections = (() => {
+    const dlg = $('#dlgCollections');
+    const listEl = $('#collList');
+    const tplRow = $('#tplCollRow');
+    let tagFilter = null;
+    let armed = null; // {id, kind} for two-tap confirm
+    let armedTimer = 0;
+
+    function open() { renderList(); dlg.showModal(); }
+
+    function disarm() {
+      armed = null;
+      clearTimeout(armedTimer);
+      renderList();
+    }
+    function arm(id, kind) {
+      armed = { id, kind };
+      clearTimeout(armedTimer);
+      armedTimer = setTimeout(disarm, 2500);
+      renderList();
+    }
+
+    function allTags() {
+      const t = new Set();
+      S.collections.forEach(c => (c.tags || []).forEach(x => t.add(x)));
+      return [...t].sort();
+    }
+
+    function renderList() {
+      if (!dlg.open && !dlg.hasAttribute('data-prerender')) { /* still render cheap */ }
+      const tags = allTags();
+      const chips = $('#tagChips');
+      chips.innerHTML = '';
+      tags.forEach(t => {
+        const b = document.createElement('button');
+        b.className = 'chip' + (tagFilter === t ? ' on' : '');
+        b.textContent = t;
+        b.addEventListener('click', () => { tagFilter = tagFilter === t ? null : t; renderList(); });
+        chips.appendChild(b);
+      });
+      const rows = S.collections.filter(c => !tagFilter || (c.tags || []).includes(tagFilter));
+      listEl.innerHTML = '';
+      rows.forEach(c => {
+        const row = tplRow.content.firstElementChild.cloneNode(true);
+        row.querySelector('.cname').textContent = c.name;
+        const meta = row.querySelector('.cmeta');
+        const parts = [c.fonts.length + ' fonts'];
+        if (c.tags && c.tags.length) parts.push(c.tags.join(', '));
+        parts.push(new Date(c.updatedAt || c.createdAt).toLocaleDateString());
+        meta.textContent = parts.join(' · ');
+
+        const loadBtn = row.querySelector('.load');
+        const delBtn = row.querySelector('.del');
+        if (armed && armed.id === c.id && armed.kind === 'load') { loadBtn.textContent = 'Replace shortlist?'; loadBtn.classList.add('danger-armed'); }
+        if (armed && armed.id === c.id && armed.kind === 'del') { delBtn.textContent = 'Confirm delete'; delBtn.classList.add('danger-armed'); }
+
+        loadBtn.addEventListener('click', () => {
+          const needsConfirm = S.shortlist.length > 0 && !(armed && armed.id === c.id && armed.kind === 'load');
+          if (needsConfirm) { arm(c.id, 'load'); return; }
+          Store.set({ shortlist: c.fonts.slice() });
+          disarm();
+          dlg.close();
+          toast('Loaded “' + c.name + '”');
+        });
+        delBtn.addEventListener('click', () => {
+          if (!(armed && armed.id === c.id && armed.kind === 'del')) { arm(c.id, 'del'); return; }
+          Store.set({ collections: S.collections.filter(x => x.id !== c.id) });
+          disarm();
+          toast('Deleted “' + c.name + '”');
+        });
+        row.querySelector('.rename').addEventListener('click', () => {
+          const nameEl = row.querySelector('.cname');
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.value = c.name;
+          nameEl.innerHTML = '';
+          nameEl.appendChild(input);
+          input.focus();
+          input.select();
+          const commit = () => {
+            const v = input.value.trim();
+            if (v && v !== c.name) {
+              Store.set({ collections: S.collections.map(x => x.id === c.id ? { ...x, name: v, updatedAt: Date.now() } : x) });
+              toast('Renamed');
+            }
+            renderList();
+          };
+          input.addEventListener('blur', commit);
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') input.blur();
+            if (e.key === 'Escape') { input.removeEventListener('blur', commit); renderList(); }
+          });
+        });
+        listEl.appendChild(row);
+      });
+      $('#collEmpty').style.display = rows.length ? 'none' : '';
+    }
+
+    function saveCurrent(name, tagsRaw) {
+      const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+      const now = Date.now();
+      Store.set({
+        collections: S.collections.concat({
+          id: uid(), name, tags, fonts: S.shortlist.slice(), createdAt: now, updatedAt: now
+        })
+      });
+      toast('Saved “' + name + '” (' + S.shortlist.length + ' fonts)');
+    }
+
+    return { open, renderList, saveCurrent };
+  })();
+
+  /* ============ (8) Exporter [PRO] ============ */
+  const Exporter = (() => {
+    const dlg = $('#dlgExport');
+
+    function transformCase(text) {
+      if (S.caseMode === 'upper') return text.toUpperCase();
+      if (S.caseMode === 'lower') return text.toLowerCase();
+      return text;
+    }
+
+    function open() {
+      $('#exportInfo').textContent = S.shortlist.length + ' fonts · sample “' + (S.previewText.trim() || 'font name') + '”';
+      $('#exportText').value = S.shortlist.join('\n');
+      dlg.showModal();
+    }
+
+    async function copyList() {
+      const text = S.shortlist.join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        toast('Copied ' + S.shortlist.length + ' font names');
+      } catch (e) {
+        const ta = $('#exportText');
+        ta.focus();
+        ta.select();
+        toast('Clipboard blocked — the list is selected, press Ctrl/Cmd+C');
+      }
+    }
+
+    async function downloadPNG() {
+      const fams = S.shortlist.slice();
+      if (!fams.length) return;
+      const scale = 2, pad = 48, sampleSize = 48, labelSize = 13;
+      const rowGap = 30, labelGap = 8;
+      const cvs = document.createElement('canvas');
+      const ctx = cvs.getContext('2d');
+
+      const byLabel = new Map(S.fonts.map(f => [f.label, f]));
+      const entryFor = (label) => byLabel.get(label) || { label, family: label };
+      try {
+        await Promise.all(fams.map(f => document.fonts.load(cssFontString(sampleSize, entryFor(f)))));
+      } catch (e) { /* best effort */ }
+
+      const sampleFor = (fam) => transformCase(S.previewText.trim() || fam);
+      let maxW = 720 - pad * 2;
+      for (const f of fams) {
+        setCanvasFont(ctx, sampleSize, entryFor(f));
+        maxW = Math.max(maxW, ctx.measureText(sampleFor(f)).width);
+      }
+      const w = Math.min(1800, Math.max(720, Math.ceil(maxW + pad * 2)));
+      const rowH = labelSize + labelGap + Math.ceil(sampleSize * 1.3) + rowGap;
+      const headH = pad + 30 + 24;
+      const h = headH + fams.length * rowH + pad - rowGap;
+
+      cvs.width = w * scale;
+      cvs.height = h * scale;
+      ctx.scale(scale, scale);
+
+      const bg = S.negative ? '#101114' : '#FFFFFF';
+      const ink = S.textColor || (S.negative ? '#F2F3F5' : '#1A1C21');
+      const mut = S.negative ? '#8B919E' : '#6C7280';
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = ink;
+      ctx.font = '600 24px system-ui, "Segoe UI", sans-serif';
+      ctx.fillText(transformCase(S.previewText.trim() || 'Fontmark shortlist'), pad, pad + 20);
+      ctx.fillStyle = mut;
+      ctx.font = '12px ui-monospace, Consolas, monospace';
+      ctx.fillText(fams.length + ' FONTS · FONTMARK · ' + new Date().toLocaleDateString().toUpperCase(), pad, pad + 44);
+
+      let y = headH + labelSize + 10;
+      const maxTextW = w - pad * 2;
+      for (const f of fams) {
+        ctx.fillStyle = mut;
+        ctx.font = '11px ui-monospace, Consolas, monospace';
+        ctx.fillText(f.toUpperCase(), pad, y);
+        ctx.fillStyle = ink;
+        setCanvasFont(ctx, sampleSize, entryFor(f));
+        let sample = sampleFor(f);
+        if (ctx.measureText(sample).width > maxTextW) {
+          while (sample.length > 1 && ctx.measureText(sample + '…').width > maxTextW) sample = sample.slice(0, -1);
+          sample += '…';
+        }
+        ctx.fillText(sample, pad, y + labelGap + sampleSize);
+        y += rowH;
+      }
+
+      cvs.toBlob((blob) => {
+        if (!blob) { toast('PNG export failed'); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'fontmark-shortlist.png';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        toast('PNG downloaded');
+      }, 'image/png');
+    }
+
+    return { open, copyList, downloadPNG };
+  })();
+
+  /* ============ (9) Compare [PRO] ============ */
+  const Compare = (() => {
+    const dlg = $('#dlgCompare');
+    let picked = [];
+    let sample = '';
+    let size = 72;
+
+    function open() {
+      picked = S.shortlist.slice(0, 4);
+      sample = S.previewText.trim() || 'Hamburgefonstiv';
+      $('#cmpText').value = sample;
+      renderPicker();
+      renderCols();
+      dlg.showModal();
+    }
+
+    function renderPicker() {
+      const box = $('#cmpPicker');
+      box.innerHTML = '';
+      if (S.shortlist.length <= 4) { box.style.display = 'none'; return; }
+      box.style.display = '';
+      S.shortlist.forEach(fam => {
+        const lab = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = picked.includes(fam);
+        cb.addEventListener('change', () => {
+          if (cb.checked) {
+            if (picked.length >= 4) { cb.checked = false; toast('Compare holds up to 4 fonts'); return; }
+            picked.push(fam);
+          } else {
+            picked = picked.filter(f => f !== fam);
+          }
+          renderCols();
+        });
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(' ' + fam));
+        box.appendChild(lab);
+      });
+    }
+
+    function renderCols() {
+      const box = $('#cmpCols');
+      box.innerHTML = '';
+      box.style.setProperty('--cols', Math.max(1, Math.min(picked.length, 4)));
+      box.style.setProperty('--cmp-size', size + 'px');
+      box.classList.toggle('negative', S.negative);
+      box.classList.toggle('case-upper', S.caseMode === 'upper');
+      box.classList.toggle('case-lower', S.caseMode === 'lower');
+      if (S.textColor) box.style.setProperty('--pv-ink', S.textColor);
+      else box.style.removeProperty('--pv-ink');
+      const byLabel = new Map(S.fonts.map(f => [f.label, f]));
+      picked.forEach(fam => {
+        const col = document.createElement('div');
+        col.className = 'col';
+        const lb = document.createElement('div');
+        lb.className = 'col-label';
+        lb.textContent = fam;
+        const sp = document.createElement('div');
+        sp.className = 'col-sample';
+        const entry = byLabel.get(fam);
+        if (entry) applyFont(sp, entry);
+        sp.textContent = sample || fam;
+        col.appendChild(lb);
+        col.appendChild(sp);
+        box.appendChild(col);
+      });
+    }
+
+    $('#cmpText').addEventListener('input', (e) => { sample = e.target.value; renderCols(); });
+    $('#cmpSize').addEventListener('input', (e) => {
+      size = Number(e.target.value);
+      $('#cmpSizeVal').textContent = size + 'px';
+      $('#cmpCols').style.setProperty('--cmp-size', size + 'px');
+    });
+
+    return { open };
+  })();
+
+  /* ============ (10) Controls wiring ============ */
+  const inputText = $('#previewText');
+  inputText.addEventListener('input', () => Store.set({ previewText: inputText.value }));
+
+  const search = $('#searchBox');
+  search.addEventListener('input', debounce(() => Store.set({ search: search.value }), 120));
+
+  const slider = $('#sizeSlider');
+  slider.addEventListener('input', () => Store.set({ fontSize: Number(slider.value) }));
+
+  $('#caseSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    Store.set({ caseMode: b.dataset.case });
+  });
+
+  $('#btnNegative').addEventListener('click', () => Store.set({ negative: !S.negative }));
+
+  const colorPick = $('#colorPick');
+  colorPick.addEventListener('input', () => Store.set({ textColor: colorPick.value }));
+  $('#colorReset').addEventListener('click', () => Store.set({ textColor: null }));
+
+  $('#btnIsolate').addEventListener('click', () => Store.set({ isolate: !S.isolate }));
+  $('#btnCompare').addEventListener('click', () => Compare.open());
+  $('#btnCollections').addEventListener('click', () => Collections.open());
+  $('#btnExport').addEventListener('click', () => Exporter.open());
+  $('#btnPng').addEventListener('click', () => Exporter.downloadPNG());
+  $('#btnCopy').addEventListener('click', () => Exporter.copyList());
+  $('#btnClear').addEventListener('click', () => Store.set({ shortlist: [] }));
+
+  // save-collection inline form
+  $('#btnSaveColl').addEventListener('click', () => {
+    $('#saveForm').classList.add('open');
+    $('#collName').focus();
+  });
+  $('#saveCancel').addEventListener('click', () => $('#saveForm').classList.remove('open'));
+  $('#saveForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('#collName').value.trim();
+    if (!name) return;
+    Collections.saveCurrent(name, $('#collTags').value);
+    $('#collName').value = '';
+    $('#collTags').value = '';
+    $('#saveForm').classList.remove('open');
+  });
+
+  // dialogs close buttons
+  document.querySelectorAll('dialog .x[data-close]').forEach(b =>
+    b.addEventListener('click', () => b.closest('dialog').close()));
+
+  // mobile tray
+  $('#trayFab').addEventListener('click', () => $('#tray').classList.toggle('open'));
+  document.addEventListener('click', (e) => {
+    const tray = $('#tray');
+    if (!tray.classList.contains('open')) return;
+    if (window.innerWidth >= 1100) return;
+    if (tray.contains(e.target) || e.target.closest('#trayFab')) return;
+    tray.classList.remove('open');
+  });
+
+  // uploads: button + drag/drop overlay
+  const fileInput = $('#fileInput');
+  $('#btnUpload').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    [...fileInput.files].forEach(f => FontLoader.addUpload(f));
+    fileInput.value = '';
+  });
+  let dragDepth = 0;
+  window.addEventListener('dragenter', (e) => {
+    if (![...(e.dataTransfer ? e.dataTransfer.types : [])].includes('Files')) return;
+    dragDepth++;
+    $('#dropzone').classList.add('on');
+  });
+  window.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) $('#dropzone').classList.remove('on');
+  });
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    $('#dropzone').classList.remove('on');
+    if (e.dataTransfer && e.dataTransfer.files.length) {
+      [...e.dataTransfer.files].forEach(f => FontLoader.addUpload(f));
+    }
+  });
+
+  // add an installed font by its exact name (canvas probe — no permission needed)
+  $('#addByName').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const inp = $('#addNameInput');
+    const name = inp.value.trim();
+    if (!name) return;
+    if (S.fonts.some(f => f.label.toLowerCase() === name.toLowerCase())) {
+      toast('“' + name + '” is already in the list');
+      return;
+    }
+    if (FontLoader.probeOne(name)) {
+      Store.set({ fonts: [{ label: name, family: name, source: 'probed' }].concat(S.fonts) });
+      toast('Added ' + name);
+      inp.value = '';
+    } else {
+      toast('“' + name + '” doesn’t seem to be installed on this device — check the exact font name.');
+    }
+  });
+
+  // queryLocalFonts button
+  const btnLocal = $('#btnLoadLocal');
+  if ('queryLocalFonts' in window) {
+    btnLocal.hidden = false;
+    btnLocal.addEventListener('click', () => FontLoader.loadLocalFonts());
+  }
+
+  /* ============ (11) Store subscriber & boot ============ */
+  Store.subscribe((keys) => {
+    if (keys.includes('fonts') || keys.includes('isolate')) {
+      Grid.rebuild();
+      Shortlist.render();
+      updateStatus();
+    }
+    if (keys.includes('previewText')) Grid.updateText();
+    if (keys.includes('fontSize')) {
+      $('#sizeVal').textContent = S.fontSize + 'px';
+      Grid.applyView();
+    }
+    if (keys.includes('caseMode')) {
+      document.querySelectorAll('#caseSeg button').forEach(b =>
+        b.setAttribute('aria-pressed', String(b.dataset.case === S.caseMode)));
+      Grid.applyView();
+    }
+    if (keys.includes('negative')) {
+      $('#btnNegative').classList.toggle('on', S.negative);
+      $('#btnNegative').setAttribute('aria-pressed', String(S.negative));
+      Grid.applyView();
+    }
+    if (keys.includes('textColor')) {
+      $('#colorReset').hidden = !S.textColor;
+      if (S.textColor) colorPick.value = S.textColor;
+      Grid.applyView();
+    }
+    if (keys.includes('search')) Grid.applySearch();
+    if (keys.includes('shortlist')) {
+      Shortlist.render();
+      Grid.syncSelected();
+      if (S.isolate) Grid.rebuild();
+      if (S.isolate && !S.shortlist.length) Store.set({ isolate: false });
+    }
+    if (keys.includes('isolate')) {
+      $('#btnIsolate').classList.toggle('on', S.isolate);
+      $('#btnIsolate').setAttribute('aria-pressed', String(S.isolate));
+    }
+    if (keys.includes('collections')) Collections.renderList();
+  });
+
+  function updateStatus() {
+    const el = $('#srcStatus');
+    const n = S.fonts.filter(f => f.source !== 'uploaded').length;
+    if (S.fontSource === 'probing') el.textContent = 'Detecting fonts…';
+    else if (S.fontSource === 'local') el.textContent = n + ' installed families';
+    else el.textContent = n + ' common fonts detected';
+  }
+
+  function boot() {
+    Store.load();
+    // reflect persisted settings into controls
+    inputText.value = S.previewText;
+    slider.value = S.fontSize;
+    $('#sizeVal').textContent = S.fontSize + 'px';
+    document.querySelectorAll('#caseSeg button').forEach(b =>
+      b.setAttribute('aria-pressed', String(b.dataset.case === S.caseMode)));
+    $('#btnNegative').classList.toggle('on', S.negative);
+    $('#btnNegative').setAttribute('aria-pressed', String(S.negative));
+    if (S.textColor) { colorPick.value = S.textColor; $('#colorReset').hidden = false; }
+    Grid.applyView();
+    Shortlist.render();
+    FontLoader.probeCurated();
+  }
+
+  boot();
+})();
+</script>
+
+</body>
+</html>
