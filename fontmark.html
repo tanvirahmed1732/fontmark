@@ -201,6 +201,15 @@
     font-size: 15px; line-height: 1; cursor: pointer; padding: 2px 4px; border-radius: 4px;
   }
   .card .rm:hover { color: var(--danger); }
+  .card .zoom {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    font-size: 13px; line-height: 1; cursor: pointer; padding: 2px 4px; border-radius: 4px;
+  }
+  .card .zoom:hover { color: var(--ink); background: var(--line); }
+  @media (hover: hover) and (pointer: fine) {
+    .card .zoom { visibility: hidden; }
+    .card:hover .zoom, .card .zoom:focus-visible { visibility: visible; }
+  }
   .preview {
     flex: 1;
     padding: 16px 14px;
@@ -288,6 +297,31 @@
     .tray.open { transform: translateY(0); }
     .fab { display: block; }
   }
+
+  /* ============ full-screen zoom ============ */
+  dialog.dlg-zoom {
+    width: 100vw; height: 100dvh;
+    max-width: none; max-height: none;
+    margin: 0; border: 0; border-radius: 0;
+  }
+  dialog.dlg-zoom[open] { display: flex; flex-direction: column; }
+  .dlg-zoom .dlg-head { flex: none; }
+  .dlg-zoom .dlg-head h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .zoom-stage {
+    flex: 1; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; overflow: hidden;
+    background: var(--pos-bg);
+  }
+  .dlg-zoom.negative .zoom-stage { background: var(--neg-bg); }
+  #zoomText {
+    display: block; max-width: 100%;
+    word-break: break-word; text-align: center; line-height: 1.12;
+    color: var(--pv-ink, var(--pos-ink));
+  }
+  .dlg-zoom.negative #zoomText { color: var(--pv-ink, var(--neg-ink)); }
+  .dlg-zoom.case-upper #zoomText { text-transform: uppercase; }
+  .dlg-zoom.case-lower #zoomText { text-transform: lowercase; }
 
   /* ============ dialogs ============ */
   dialog {
@@ -480,6 +514,15 @@
   </div>
 </dialog>
 
+<dialog id="dlgZoom" class="dlg-zoom" aria-label="Full screen font preview">
+  <div class="dlg-head">
+    <h2 id="zoomName"></h2>
+    <span class="label" id="zoomSize"></span>
+    <button class="x" data-close aria-label="Close full screen">×</button>
+  </div>
+  <div id="zoomStage" class="zoom-stage"><span id="zoomText"></span></div>
+</dialog>
+
 <div id="dropzone" class="dropzone">Drop font files to preview them (.ttf .otf .woff .woff2)</div>
 <input id="fileInput" type="file" accept=".ttf,.otf,.woff,.woff2" multiple hidden>
 <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
@@ -490,6 +533,7 @@
       <span class="check" aria-hidden="true">✓</span>
       <span class="fam"></span>
       <span class="meta"></span>
+      <button class="zoom" title="View full screen" aria-label="View font full screen">⛶</button>
       <button class="rm" hidden aria-label="Remove uploaded font">×</button>
     </div>
     <div class="preview"></div>
@@ -1020,14 +1064,15 @@
 
     // interactions (event delegation)
     grid.addEventListener('click', (e) => {
-      const rm = e.target.closest('.rm');
       const card = e.target.closest('.card');
       if (!card) return;
-      if (rm) { FontLoader.removeUpload(card.dataset.label); return; }
+      if (e.target.closest('.zoom')) { Zoom.open(card.dataset.label); return; }
+      if (e.target.closest('.rm')) { FontLoader.removeUpload(card.dataset.label); return; }
       Shortlist.toggle(card.dataset.label);
     });
     grid.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.target.closest('button')) return; // buttons handle their own activation
       const card = e.target.closest('.card');
       if (!card) return;
       e.preventDefault();
@@ -1035,6 +1080,47 @@
     });
 
     return { rebuild, updateText, applySearch, syncSelected, applyView, displayText };
+  })();
+
+  /* ============ (5b) Zoom — full-screen single-font preview ============ */
+  const Zoom = (() => {
+    const dlg = $('#dlgZoom');
+    const stage = $('#zoomStage');
+    const textEl = $('#zoomText');
+
+    // Largest font size where the sample still fits the stage.
+    function fit() {
+      if (!dlg.open) return;
+      const availW = stage.clientWidth - 48;
+      const availH = stage.clientHeight - 48;
+      let lo = 8, hi = 1200;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        textEl.style.fontSize = mid + 'px';
+        const r = textEl.getBoundingClientRect();
+        if (r.width <= availW && r.height <= availH) lo = mid; else hi = mid;
+      }
+      textEl.style.fontSize = lo + 'px';
+      $('#zoomSize').textContent = lo + 'px';
+    }
+
+    function open(label) {
+      const font = S.fonts.find(f => f.label === label);
+      if (!font) return;
+      $('#zoomName').textContent = font.label;
+      textEl.textContent = S.previewText.trim() || font.label;
+      applyFont(textEl, font);
+      dlg.classList.toggle('negative', S.negative);
+      dlg.classList.toggle('case-upper', S.caseMode === 'upper');
+      dlg.classList.toggle('case-lower', S.caseMode === 'lower');
+      if (S.textColor) dlg.style.setProperty('--pv-ink', S.textColor);
+      else dlg.style.removeProperty('--pv-ink');
+      dlg.showModal();
+      fit();
+    }
+
+    window.addEventListener('resize', fit);
+    return { open };
   })();
 
   /* ============ (6) Shortlist / tray ============ */
