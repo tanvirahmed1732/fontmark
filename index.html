@@ -306,30 +306,42 @@
     .fab { display: block; }
   }
 
-  /* ============ full-screen zoom ============ */
-  dialog.dlg-zoom {
-    width: 100vw; height: 100dvh;
-    max-width: none; max-height: none;
-    margin: 0; border: 0; border-radius: 0;
+  /* ============ zoom popup (covers the font grid only) ============ */
+  #zoomOverlay {
+    position: fixed; z-index: 60;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 32px;
+    background: rgba(10, 12, 18, 0.25);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
   }
-  dialog.dlg-zoom[open] { display: flex; flex-direction: column; }
-  .dlg-zoom .dlg-head { flex: none; }
-  .dlg-zoom .dlg-head h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #zoomOverlay.open { display: flex; }
+  .zoom-pop {
+    width: 100%; height: 100%; min-height: 0;
+    background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .zoom-pop .dlg-head { flex: none; }
+  .zoom-pop .dlg-head h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .zoom-stage {
     flex: 1; min-height: 0;
     display: flex; align-items: center; justify-content: center;
     padding: 24px; overflow: hidden;
     background: var(--pos-bg);
   }
-  .dlg-zoom.negative .zoom-stage { background: var(--neg-bg); }
+  #zoomOverlay.negative .zoom-stage { background: var(--neg-bg); }
   #zoomText {
     display: block; max-width: 100%;
     word-break: break-word; text-align: center; line-height: 1.12;
     color: var(--pv-ink, var(--pos-ink));
   }
-  .dlg-zoom.negative #zoomText { color: var(--pv-ink, var(--neg-ink)); }
-  .dlg-zoom.case-upper #zoomText { text-transform: uppercase; }
-  .dlg-zoom.case-lower #zoomText { text-transform: lowercase; }
+  #zoomOverlay.negative #zoomText { color: var(--pv-ink, var(--neg-ink)); }
+  #zoomOverlay.case-upper #zoomText { text-transform: uppercase; }
+  #zoomOverlay.case-lower #zoomText { text-transform: lowercase; }
 
   /* ============ dialogs ============ */
   dialog {
@@ -522,14 +534,16 @@
   </div>
 </dialog>
 
-<dialog id="dlgZoom" class="dlg-zoom" aria-label="Full screen font preview">
-  <div class="dlg-head">
-    <h2 id="zoomName"></h2>
-    <span class="label" id="zoomSize"></span>
-    <button class="x" data-close aria-label="Close full screen">×</button>
+<div id="zoomOverlay" aria-label="Font zoom preview">
+  <div class="zoom-pop" role="dialog">
+    <div class="dlg-head">
+      <h2 id="zoomName"></h2>
+      <span class="label" id="zoomSize"></span>
+      <button class="x" id="zoomClose" aria-label="Close zoom">×</button>
+    </div>
+    <div id="zoomStage" class="zoom-stage"><span id="zoomText"></span></div>
   </div>
-  <div id="zoomStage" class="zoom-stage"><span id="zoomText"></span></div>
-</dialog>
+</div>
 
 <div id="dropzone" class="dropzone">Drop font files to preview them (.ttf .otf .woff .woff2)</div>
 <input id="fileInput" type="file" accept=".ttf,.otf,.woff,.woff2" multiple hidden>
@@ -1090,15 +1104,27 @@
     return { rebuild, updateText, applySearch, syncSelected, applyView, displayText };
   })();
 
-  /* ============ (5b) Zoom — full-screen single-font preview ============ */
+  /* ============ (5b) Zoom — pop-out preview over the font grid ============ */
   const Zoom = (() => {
-    const dlg = $('#dlgZoom');
+    const overlay = $('#zoomOverlay');
     const stage = $('#zoomStage');
     const textEl = $('#zoomText');
 
+    const isOpen = () => overlay.classList.contains('open');
+
+    // Cover exactly the visible part of the grid column, leaving the tray free.
+    function place() {
+      const r = document.querySelector('.grid-wrap').getBoundingClientRect();
+      const top = Math.max(r.top, 0);
+      const left = Math.max(r.left, 0);
+      overlay.style.top = top + 'px';
+      overlay.style.left = left + 'px';
+      overlay.style.width = (Math.min(r.right, window.innerWidth) - left) + 'px';
+      overlay.style.height = (Math.min(r.bottom, window.innerHeight) - top) + 'px';
+    }
+
     // Largest font size where the sample still fits the stage.
     function fit() {
-      if (!dlg.open) return;
       const availW = stage.clientWidth - 48;
       const availH = stage.clientHeight - 48;
       let lo = 8, hi = 1200;
@@ -1118,16 +1144,22 @@
       $('#zoomName').textContent = font.label;
       textEl.textContent = S.previewText.trim() || font.label;
       applyFont(textEl, font);
-      dlg.classList.toggle('negative', S.negative);
-      dlg.classList.toggle('case-upper', S.caseMode === 'upper');
-      dlg.classList.toggle('case-lower', S.caseMode === 'lower');
-      if (S.textColor) dlg.style.setProperty('--pv-ink', S.textColor);
-      else dlg.style.removeProperty('--pv-ink');
-      dlg.showModal();
+      overlay.classList.toggle('negative', S.negative);
+      overlay.classList.toggle('case-upper', S.caseMode === 'upper');
+      overlay.classList.toggle('case-lower', S.caseMode === 'lower');
+      if (S.textColor) overlay.style.setProperty('--pv-ink', S.textColor);
+      else overlay.style.removeProperty('--pv-ink');
+      place();
+      overlay.classList.add('open');
       fit();
     }
 
-    window.addEventListener('resize', fit);
+    function close() { overlay.classList.remove('open'); }
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    $('#zoomClose').addEventListener('click', close);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) close(); });
+    window.addEventListener('resize', () => { if (isOpen()) { place(); fit(); } });
     return { open };
   })();
 
