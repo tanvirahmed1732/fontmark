@@ -303,10 +303,10 @@
     position: fixed; z-index: 60;
     display: none;
     align-items: center; justify-content: center;
-    padding: 32px;
-    background: rgba(10, 12, 18, 0.25);
-    -webkit-backdrop-filter: blur(6px);
-    backdrop-filter: blur(6px);
+    padding: 56px 64px;
+    background: rgba(10, 12, 18, 0.2);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
   }
   #zoomOverlay.open { display: flex; }
   .zoom-pop {
@@ -322,13 +322,13 @@
   .zoom-stage {
     flex: 1; min-height: 0;
     display: flex; align-items: center; justify-content: center;
-    padding: 24px; overflow: hidden;
+    padding: 40px; overflow: hidden;
     background: var(--pos-bg);
   }
   #zoomOverlay.negative .zoom-stage { background: var(--neg-bg); }
   #zoomText {
     display: block; max-width: 100%;
-    word-break: break-word; text-align: center; line-height: 1.12;
+    word-break: break-word; text-align: center; line-height: 1.3;
     color: var(--pv-ink, var(--pos-ink));
   }
   #zoomOverlay.negative #zoomText { color: var(--pv-ink, var(--neg-ink)); }
@@ -1104,21 +1104,25 @@
 
     const isOpen = () => overlay.classList.contains('open');
 
-    // Cover exactly the visible part of the grid column, leaving the tray free.
+    // Cover exactly the visible part of the grid column, leaving the tray
+    // and the grid's own scrollbar free.
     function place() {
-      const r = document.querySelector('.grid-wrap').getBoundingClientRect();
+      const wrap = document.querySelector('.grid-wrap');
+      const r = wrap.getBoundingClientRect();
       const top = Math.max(r.top, 0);
       const left = Math.max(r.left, 0);
+      const right = Math.min(r.left + wrap.clientWidth, window.innerWidth);
       overlay.style.top = top + 'px';
       overlay.style.left = left + 'px';
-      overlay.style.width = (Math.min(r.right, window.innerWidth) - left) + 'px';
+      overlay.style.width = (right - left) + 'px';
       overlay.style.height = (Math.min(r.bottom, window.innerHeight) - top) + 'px';
     }
 
-    // Largest font size where the sample still fits the stage.
+    // Largest font size where the sample still fits the stage, backed off
+    // so swashes and overshoots outside the em box aren't clipped.
     function fit() {
-      const availW = stage.clientWidth - 48;
-      const availH = stage.clientHeight - 48;
+      const availW = stage.clientWidth - 80;
+      const availH = stage.clientHeight - 80;
       let lo = 8, hi = 1200;
       while (hi - lo > 1) {
         const mid = (lo + hi) >> 1;
@@ -1126,8 +1130,9 @@
         const r = textEl.getBoundingClientRect();
         if (r.width <= availW && r.height <= availH) lo = mid; else hi = mid;
       }
-      textEl.style.fontSize = lo + 'px';
-      $('#zoomSize').textContent = lo + 'px';
+      const size = Math.max(8, Math.floor(lo * 0.85));
+      textEl.style.fontSize = size + 'px';
+      $('#zoomSize').textContent = size + 'px';
     }
 
     function open(label) {
