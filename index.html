@@ -401,7 +401,13 @@
   #cmpOverlay .dlg-body { flex: 1; min-height: 0; max-height: none; display: flex; flex-direction: column; }
   .cmp-ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
   .cmp-ctl input[type="text"] { flex: 1 1 220px; }
-  .cmp-picker { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
+  .cmp-picker {
+    display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px;
+    /* at most ~2 rows of checkboxes; longer lists scroll instead of
+       eating the sample area */
+    max-height: 56px; overflow-y: auto; flex: none;
+    padding-right: 4px;
+  }
   .cmp-picker label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
   /* 4-across tiles sized to their content; the list scrolls, and a
      partially visible row at the bottom is fine */
