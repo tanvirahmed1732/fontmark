@@ -403,18 +403,18 @@
   .cmp-ctl input[type="text"] { flex: 1 1 220px; }
   .cmp-picker { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
   .cmp-picker label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
-  /* 4x2 grid: 8 fonts visible, scroll for the rest */
+  /* 4-across tiles sized to their content; the list scrolls, and a
+     partially visible row at the bottom is fine */
   .compare-cols {
     flex: 1; min-height: 0; overflow-y: auto;
-    display: grid; gap: 12px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-auto-rows: calc((100% - 12px) / 2);
+    display: flex; flex-wrap: wrap; align-content: flex-start;
+    gap: 12px;
   }
-  @media (max-width: 900px) { .compare-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .col { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+  .col { flex: none; width: calc(25% - 9px); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
+  @media (max-width: 900px) { .col { width: calc(50% - 6px); } }
   .col-label { flex: none; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .col-sample {
-    flex: 1; min-height: 0; overflow-y: auto;
+    flex: 1 1 auto;
     padding: 14px 12px;
     background: var(--pos-bg); color: var(--pv-ink, var(--pos-ink));
     font-size: var(--cmp-size, 40px); line-height: 1.2; word-break: break-word;
