@@ -380,29 +380,37 @@
   .export-acts { display: flex; gap: 8px; flex-wrap: wrap; }
 
   /* compare */
-  #dlgCompare {
-    width: min(1500px, calc(100vw - 96px));
-    height: calc(100dvh - 96px);
-    max-height: none;
+  #cmpOverlay {
+    position: fixed; z-index: 60;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 56px 64px;
+    background: rgba(10, 12, 18, 0.2);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
   }
-  #dlgCompare[open] { display: flex; flex-direction: column; }
-  #dlgCompare .dlg-head { flex: none; }
-  #dlgCompare .dlg-body { flex: 1; min-height: 0; max-height: none; display: flex; flex-direction: column; }
-  #dlgCompare .compare-cols { flex: 1; min-height: 0; overflow-y: auto; }
+  #cmpOverlay.open { display: flex; }
+  #cmpOverlay .dlg-body { flex: 1; min-height: 0; max-height: none; display: flex; flex-direction: column; }
   .cmp-ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
   .cmp-ctl input[type="text"] { flex: 1 1 220px; }
   .cmp-picker { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
   .cmp-picker label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
-  .compare-cols { display: grid; gap: 12px; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
-  .col { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
-  .col-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
-  .col-sample {
-    flex: 1; min-height: 140px; overflow-y: auto;
-    padding: 20px 16px;
-    background: var(--pos-bg); color: var(--pv-ink, var(--pos-ink));
-    font-size: var(--cmp-size, 72px); line-height: 1.15; word-break: break-word;
+  /* 4x2 grid: 8 fonts visible, scroll for the rest */
+  .compare-cols {
+    flex: 1; min-height: 0; overflow-y: auto;
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-rows: calc((100% - 12px) / 2);
   }
-  @media (max-width: 800px) { .compare-cols { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .compare-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .col { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+  .col-label { flex: none; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .col-sample {
+    flex: 1; min-height: 0; overflow-y: auto;
+    padding: 14px 12px;
+    background: var(--pos-bg); color: var(--pv-ink, var(--pos-ink));
+    font-size: var(--cmp-size, 40px); line-height: 1.2; word-break: break-word;
+  }
 
   /* upload overlay */
   .dropzone {
@@ -521,19 +529,21 @@
   </div>
 </dialog>
 
-<dialog id="dlgCompare" aria-label="Compare fonts">
-  <div class="dlg-head"><h2>Compare<span class="pro">PRO</span></h2><button class="x" data-close aria-label="Close">×</button></div>
-  <div class="dlg-body">
-    <div id="cmpPicker" class="cmp-picker"></div>
-    <div class="cmp-ctl">
-      <input id="cmpText" type="text" placeholder="Sample text" autocomplete="off">
-      <span class="label">Size</span>
-      <input id="cmpSize" type="range" min="24" max="200" step="1" value="72" aria-label="Compare font size">
-      <span class="val label" id="cmpSizeVal">72px</span>
+<div id="cmpOverlay" aria-label="Compare fonts">
+  <div class="zoom-pop" role="dialog">
+    <div class="dlg-head"><h2>Compare<span class="pro">PRO</span></h2><button class="x" id="cmpClose" aria-label="Close compare">×</button></div>
+    <div class="dlg-body">
+      <div id="cmpPicker" class="cmp-picker"></div>
+      <div class="cmp-ctl">
+        <input id="cmpText" type="text" placeholder="Sample text" autocomplete="off">
+        <span class="label">Size</span>
+        <input id="cmpSize" type="range" min="24" max="200" step="1" value="40" aria-label="Compare font size">
+        <span class="val label" id="cmpSizeVal">40px</span>
+      </div>
+      <div id="cmpCols" class="compare-cols"></div>
     </div>
-    <div id="cmpCols" class="compare-cols"></div>
   </div>
-</dialog>
+</div>
 
 <div id="zoomOverlay" aria-label="Font zoom preview">
   <div class="zoom-pop" role="dialog">
@@ -1513,24 +1523,43 @@
 
   /* ============ (9) Compare [PRO] ============ */
   const Compare = (() => {
-    const dlg = $('#dlgCompare');
+    const overlay = $('#cmpOverlay');
     let picked = [];
     let sample = '';
-    let size = 72;
+    let size = 40;
+
+    const isOpen = () => overlay.classList.contains('open');
+
+    // Cover the visible grid column like the zoom popup, leaving the tray
+    // and the grid's scrollbar free.
+    function place() {
+      const wrap = document.querySelector('.grid-wrap');
+      const r = wrap.getBoundingClientRect();
+      const top = Math.max(r.top, 0);
+      const left = Math.max(r.left, 0);
+      const right = Math.min(r.left + wrap.clientWidth, window.innerWidth);
+      overlay.style.top = top + 'px';
+      overlay.style.left = left + 'px';
+      overlay.style.width = (right - left) + 'px';
+      overlay.style.height = (Math.min(r.bottom, window.innerHeight) - top) + 'px';
+    }
 
     function open() {
-      picked = S.shortlist.slice(0, 4);
+      picked = S.shortlist.slice();
       sample = S.previewText.trim() || 'Hamburgefonstiv';
       $('#cmpText').value = sample;
       renderPicker();
       renderCols();
-      dlg.showModal();
+      place();
+      overlay.classList.add('open');
     }
+
+    function close() { overlay.classList.remove('open'); }
 
     function renderPicker() {
       const box = $('#cmpPicker');
       box.innerHTML = '';
-      if (S.shortlist.length <= 4) { box.style.display = 'none'; return; }
+      if (S.shortlist.length < 2) { box.style.display = 'none'; return; }
       box.style.display = '';
       S.shortlist.forEach(fam => {
         const lab = document.createElement('label');
@@ -1538,12 +1567,8 @@
         cb.type = 'checkbox';
         cb.checked = picked.includes(fam);
         cb.addEventListener('change', () => {
-          if (cb.checked) {
-            if (picked.length >= 4) { cb.checked = false; toast('Compare holds up to 4 fonts'); return; }
-            picked.push(fam);
-          } else {
-            picked = picked.filter(f => f !== fam);
-          }
+          if (cb.checked) picked.push(fam);
+          else picked = picked.filter(f => f !== fam);
           renderCols();
         });
         lab.appendChild(cb);
@@ -1555,7 +1580,6 @@
     function renderCols() {
       const box = $('#cmpCols');
       box.innerHTML = '';
-      box.style.setProperty('--cols', Math.max(1, Math.min(picked.length, 4)));
       box.style.setProperty('--cmp-size', size + 'px');
       box.classList.toggle('negative', S.negative);
       box.classList.toggle('case-upper', S.caseMode === 'upper');
@@ -1586,6 +1610,10 @@
       $('#cmpSizeVal').textContent = size + 'px';
       $('#cmpCols').style.setProperty('--cmp-size', size + 'px');
     });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    $('#cmpClose').addEventListener('click', close);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) close(); });
+    window.addEventListener('resize', () => { if (isOpen()) place(); });
 
     return { open };
   })();
