@@ -342,10 +342,12 @@
   #zoomOverlay.negative #zoomText { color: var(--pv-ink, var(--neg-ink)); }
 
   /* swash controls: feature chips under the title, floating picker at a letter */
-  .zoom-pop .dlg-head .zoom-reset { margin-left: auto; padding: 4px 10px; font-size: 12px; }
-  .zoom-pop .dlg-head .zoom-reset + .x { margin-left: 8px; }
-  .zoom-pop .dlg-head .zoom-reset[hidden] { display: none; }
-  .zoom-pop .dlg-head .zoom-reset[hidden] + .x { margin-left: auto; }
+  .zoom-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .zoom-pop .dlg-head .zoom-tools + .x { margin-left: 6px; }
+  .zoom-tools input[type="range"] { width: 130px; }
+  .zoom-tools .zoom-reset { padding: 4px 10px; font-size: 12px; }
+  .zoom-tools .zoom-reset[hidden] { display: none; }
+  #zoomText.one-line { white-space: nowrap; max-width: none; }
   .zoom-feat {
     flex: none;
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
@@ -621,7 +623,12 @@
     <div class="dlg-head">
       <h2 id="zoomName"></h2>
       <span class="label" id="zoomSize"></span>
-      <button class="btn zoom-reset" id="zoomReset" hidden>Reset swashes</button>
+      <div class="zoom-tools">
+        <span class="label">Size</span>
+        <input id="zoomScale" type="range" min="15" max="100" step="1" value="100" aria-label="Text size" title="Text size — drag left to shrink; far right is the largest that fits">
+        <button class="chip" id="zoomWrap" aria-pressed="false" title="Let long text break onto several lines so it can be larger">Wrap lines</button>
+        <button class="btn zoom-reset" id="zoomReset" hidden>Reset swashes</button>
+      </div>
       <button class="x" id="zoomClose" aria-label="Close zoom">×</button>
     </div>
     <div id="zoomFeat" class="zoom-feat"></div>
@@ -694,7 +701,7 @@
   }
 
   /* ============ (2) Store ============ */
-  const PERSISTED = ['previewText', 'fontSize', 'caseMode', 'negative', 'textColor', 'shortlist', 'collections', 'swash'];
+  const PERSISTED = ['previewText', 'fontSize', 'caseMode', 'negative', 'textColor', 'zoomWrap', 'shortlist', 'collections', 'swash'];
   const Store = (() => {
     const state = {
       fonts: [],            // [{family, source:'probed'|'local'|'uploaded', styles?}]
@@ -706,6 +713,7 @@
       caseMode: 'as-typed',
       negative: false,
       textColor: null,
+      zoomWrap: false,      // zoom popup: let text break onto several lines
       shortlist: [],
       collections: [],
       // per-font swash choices, keyed by font label:
@@ -725,6 +733,7 @@
         if (typeof s.fontSize === 'number') state.fontSize = Math.min(120, Math.max(16, s.fontSize));
         if (['as-typed', 'upper', 'lower'].includes(s.caseMode)) state.caseMode = s.caseMode;
         state.negative = !!s.negative;
+        state.zoomWrap = !!s.zoomWrap;
         if (typeof s.textColor === 'string') state.textColor = s.textColor;
         if (Array.isArray(d.shortlist)) state.shortlist = d.shortlist.filter(x => typeof x === 'string');
         if (Array.isArray(d.collections)) state.collections = d.collections.filter(c => c && c.name && Array.isArray(c.fonts));
@@ -737,7 +746,7 @@
           version: 1,
           settings: {
             previewText: state.previewText, fontSize: state.fontSize, caseMode: state.caseMode,
-            negative: state.negative, textColor: state.textColor
+            negative: state.negative, textColor: state.textColor, zoomWrap: state.zoomWrap
           },
           shortlist: state.shortlist,
           collections: state.collections,
@@ -1720,6 +1729,9 @@
     const selEl = $('#zoomSel');
     const resetBtn = $('#zoomReset');
     const hintEl = $('#zoomHint');
+    const scaleEl = $('#zoomScale');
+    const wrapBtn = $('#zoomWrap');
+    let scale = 1;       // size slider, as a fraction of the largest fitting size
     let cur = null;      // font entry on show
     let info = null;     // its parsed swash data, once read
     let text = '';       // the string on show (case applied)
@@ -1750,6 +1762,7 @@
     // been read, the real outline bounds (swashes included) are fitted too.
     function fit() {
       textEl.style.transform = '';
+      textEl.classList.toggle('one-line', !S.zoomWrap);
       const availW = stage.clientWidth - PAD * 2;
       const availH = stage.clientHeight - PAD * 2;
       if (availW <= 0 || availH <= 0) return;
@@ -1769,7 +1782,8 @@
           // and sub-pixel rounding must not reject it
           if (r.width <= availW + 0.5 && r.height <= availH + 0.5) lo = mid; else hi = mid;
         }
-        size = Math.max(8, Math.floor(lo * 0.85));
+        // `scale` is the size slider: 1 = the largest that fits
+        size = Math.max(8, Math.floor(lo * 0.85 * scale));
         textEl.style.fontSize = size + 'px';
         ink = info ? Swash.inkBox(textEl, info, cur.label, text) : null;
         if (!ink) break;
@@ -1800,6 +1814,8 @@
     }
 
     function view() {
+      wrapBtn.classList.toggle('on', S.zoomWrap);
+      wrapBtn.setAttribute('aria-pressed', String(S.zoomWrap));
       overlay.classList.toggle('negative', S.negative);
       if (S.textColor) overlay.style.setProperty('--pv-ink', S.textColor);
       else overlay.style.removeProperty('--pv-ink');
@@ -1997,6 +2013,7 @@
     function open(label) {
       const font = S.fonts.find(f => f.label === label);
       if (!font) return;
+      if (!cur || cur.label !== label) { scale = 1; scaleEl.value = 100; } // a new font starts at full size
       cur = font;
       info = null;
       sel = -1;
@@ -2042,6 +2059,15 @@
       select(-1);
       renderFeat();
       draw();
+    });
+    scaleEl.addEventListener('input', () => {
+      scale = Number(scaleEl.value) / 100;
+      fit();
+    });
+    wrapBtn.addEventListener('click', () => {
+      Store.set({ zoomWrap: !S.zoomWrap });
+      view();
+      fit();
     });
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     $('#zoomClose').addEventListener('click', close);
