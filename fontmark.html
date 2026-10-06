@@ -332,8 +332,65 @@
     color: var(--pv-ink, var(--pos-ink));
   }
   #zoomOverlay.negative #zoomText { color: var(--pv-ink, var(--neg-ink)); }
-  #zoomOverlay.case-upper #zoomText { text-transform: uppercase; }
-  #zoomOverlay.case-lower #zoomText { text-transform: lowercase; }
+
+  /* swash controls: feature chips under the title, floating picker at a letter */
+  .zoom-pop .dlg-head .zoom-reset { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+  .zoom-pop .dlg-head .zoom-reset + .x { margin-left: 8px; }
+  .zoom-pop .dlg-head .zoom-reset[hidden] { display: none; }
+  .zoom-pop .dlg-head .zoom-reset[hidden] + .x { margin-left: auto; }
+  .zoom-feat {
+    flex: none;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 9px 18px;
+    border-bottom: 1px solid var(--line);
+    max-height: 68px; overflow-y: auto;
+  }
+  .zoom-feat:empty { display: none; }
+  .zoom-feat .note { font-size: 12px; color: var(--muted); }
+  .zoom-feat .btn { padding: 4px 10px; font-size: 12px; }
+  .zoom-stage { position: relative; }
+  .zoom-stage.pickable #zoomText { cursor: pointer; }
+  .zoom-hint {
+    position: absolute; left: 0; right: 0; bottom: 11px;
+    text-align: center; font-size: 12px; color: #6C7280;
+    pointer-events: none;
+  }
+  #zoomOverlay.negative .zoom-hint { color: #8B919E; }
+  .zoom-hint[hidden] { display: none; }
+  #zoomSel {
+    position: absolute; z-index: 1; pointer-events: none;
+    border: 1.5px solid var(--accent); border-radius: 6px;
+  }
+  .zoom-pick {
+    position: absolute; z-index: 2;
+    width: max-content; max-width: min(346px, calc(100% - 16px));
+    max-height: 250px; overflow-y: auto;
+    background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 10px;
+  }
+  #zoomSel[hidden], .zoom-pick[hidden] { display: none; }
+  .zoom-pick .label { display: block; margin-bottom: 6px; }
+  .zoom-pick .pk-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .zoom-pick .pk-row + .label { margin-top: 10px; }
+  .zoom-pick .note { font-size: 12px; color: var(--muted); }
+  .pk {
+    appearance: none; padding: 0;
+    width: 58px; height: 52px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line); border-radius: 7px;
+    background: var(--pos-bg); color: var(--pos-ink);
+    font-size: 26px; line-height: 1;
+    overflow: hidden; cursor: pointer;
+  }
+  .pk.wide { width: 100px; }
+  .pk:hover { border-color: var(--muted); }
+  .pk.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .pk.pk-none {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    background: transparent; color: var(--muted);
+  }
 
   /* ============ dialogs ============ */
   dialog {
@@ -556,10 +613,17 @@
     <div class="dlg-head">
       <h2 id="zoomName"></h2>
       <span class="label" id="zoomSize"></span>
+      <button class="btn zoom-reset" id="zoomReset" hidden>Reset swashes</button>
       <button class="x" id="zoomClose" aria-label="Close zoom">×</button>
     </div>
-    <div id="zoomStage" class="zoom-stage"><span id="zoomText"></span></div>
+    <div id="zoomFeat" class="zoom-feat"></div>
+    <div id="zoomStage" class="zoom-stage">
+      <span id="zoomText"></span>
+      <span id="zoomHint" class="zoom-hint" hidden>Click a letter to pick its swash</span>
+    </div>
   </div>
+  <div id="zoomSel" hidden></div>
+  <div id="zoomPick" class="zoom-pick" hidden></div>
 </div>
 
 <div id="dropzone" class="dropzone">Drop font files to preview them (.ttf .otf .woff .woff2)</div>
@@ -622,7 +686,7 @@
   }
 
   /* ============ (2) Store ============ */
-  const PERSISTED = ['previewText', 'fontSize', 'caseMode', 'negative', 'textColor', 'shortlist', 'collections'];
+  const PERSISTED = ['previewText', 'fontSize', 'caseMode', 'negative', 'textColor', 'shortlist', 'collections', 'swash'];
   const Store = (() => {
     const state = {
       fonts: [],            // [{family, source:'probed'|'local'|'uploaded', styles?}]
@@ -635,7 +699,11 @@
       negative: false,
       textColor: null,
       shortlist: [],
-      collections: []
+      collections: [],
+      // per-font swash choices, keyed by font label:
+      // { f: {tag: 0|1}, t: text the picks belong to,
+      //   p: {charIndex: [renderText, tag, value, glyph]}, s: {charIndex: [...]} }
+      swash: {}
     };
     const listeners = [];
     function load() {
@@ -652,6 +720,7 @@
         if (typeof s.textColor === 'string') state.textColor = s.textColor;
         if (Array.isArray(d.shortlist)) state.shortlist = d.shortlist.filter(x => typeof x === 'string');
         if (Array.isArray(d.collections)) state.collections = d.collections.filter(c => c && c.name && Array.isArray(c.fonts));
+        if (d.swash && typeof d.swash === 'object' && !Array.isArray(d.swash)) state.swash = d.swash;
       } catch (e) { /* corrupt or blocked storage — start fresh */ }
     }
     const save = debounce(() => {
@@ -663,7 +732,8 @@
             negative: state.negative, textColor: state.textColor
           },
           shortlist: state.shortlist,
-          collections: state.collections
+          collections: state.collections,
+          swash: state.swash
         }));
       } catch (e) { /* storage blocked in sandbox — session-only mode */ }
     }, 250);
@@ -676,6 +746,12 @@
     return { state, set, load, subscribe: fn => listeners.push(fn) };
   })();
   const S = Store.state;
+
+  function applyCase(text) {
+    if (S.caseMode === 'upper') return text.toUpperCase();
+    if (S.caseMode === 'lower') return text.toLowerCase();
+    return text;
+  }
 
   /* ============ (3) Curated font list ============ */
   // Variant codes: R regular · I italic · B bold(700) · L light(300) · SL semilight(350)
@@ -841,6 +917,9 @@
   /* ============ (4) FontLoader ============ */
   const FontLoader = (() => {
     const uploads = new Map(); // family -> FontFace
+    const uploadBufs = new Map(); // family -> ArrayBuffer of the uploaded file
+    const localData = new Map();  // @font-face alias -> FontData (Local Font Access)
+    let localBlocked = false;
     let probeFn = null;
     function probeOne(name) {
       if (!probeFn) probeFn = makeProbe();
@@ -905,6 +984,7 @@
         const seen = new Set();
         const rules = [];
         const list = [];
+        localData.clear();
         let i = 0;
         for (const f of data) {
           const style = f.style && f.style !== 'Regular' ? ' ' + f.style : '';
@@ -918,6 +998,7 @@
           if (!srcs.length) srcs.push('local("' + f.family.replace(/"/g, '') + '")');
           rules.push('@font-face{font-family:"' + alias + '";src:' + srcs.join(',') + ';}');
           list.push({ label, family: alias, source: 'local' });
+          localData.set(alias, f);
         }
         if (!list.length) { toast('No fonts returned — permission may be blocked here.'); return; }
         list.sort((a, b) => a.label.localeCompare(b.label));
@@ -937,6 +1018,7 @@
         } else {
           // SecurityError etc.: the embedding sandbox blocks the Local Font Access
           // API entirely, so retrying can never succeed — remove the dead button.
+          localBlocked = true;
           $('#btnLoadLocal').hidden = true;
           toast('This page’s sandbox blocks reading installed fonts — the detected set covers standard fonts; add any missing one by name below.');
         }
@@ -956,6 +1038,7 @@
         await face.load();
         document.fonts.add(face);
         uploads.set(name, face);
+        uploadBufs.set(name, buf);
         Store.set({ fonts: [{ label: name, family: name, source: 'uploaded' }].concat(S.fonts) });
         toast('Added ' + name);
       } catch (e) {
@@ -967,13 +1050,511 @@
       const face = uploads.get(label);
       if (face) { try { document.fonts.delete(face); } catch (e) {} }
       uploads.delete(label);
+      uploadBufs.delete(label);
+      Swash.forget(label);
       Store.set({
         fonts: S.fonts.filter(f => f.label !== label),
         shortlist: S.shortlist.filter(f => f !== label)
       });
     }
 
-    return { probeCurated, probeOne, loadLocalFonts, addUpload, removeUpload, isUpload: f => uploads.has(f) };
+    // The raw font file for an entry, or null when the browser won't hand it
+    // over (canvas-probed fonts are only known by name).
+    async function fontData(entry) {
+      if (entry.source === 'uploaded') {
+        const buf = uploadBufs.get(entry.label);
+        return buf ? { buf, name: '' } : null;
+      }
+      if (entry.source === 'local') {
+        const fd = localData.get(entry.family);
+        if (!fd) return null;
+        const blob = await fd.blob();
+        return { buf: await blob.arrayBuffer(), name: fd.postscriptName || '' };
+      }
+      return null;
+    }
+
+    const canLoadLocal = () => 'queryLocalFonts' in window && !localBlocked;
+
+    return { probeCurated, probeOne, loadLocalFonts, addUpload, removeUpload, fontData, canLoadLocal, isUpload: f => uploads.has(f) };
+  })();
+
+  /* ============ (4b) Swash — OpenType features & per-letter alternates ============ */
+  const Swash = (() => {
+    const LIB = 'https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js';
+    const cache = new Map(); // font label -> Promise<info>
+    let libP = null;
+
+    const NAMES = {
+      swsh: 'Swash', cswh: 'Contextual swash', salt: 'Stylistic alternates', titl: 'Titling',
+      liga: 'Ligatures', dlig: 'Discretionary ligatures', hlig: 'Historical ligatures',
+      clig: 'Contextual ligatures', calt: 'Contextual alternates', hist: 'Historical forms',
+      init: 'Initial forms', medi: 'Medial forms', fina: 'Final forms', isol: 'Isolated forms',
+      smcp: 'Small caps', c2sc: 'Caps to small caps', onum: 'Old-style figures',
+      lnum: 'Lining figures', tnum: 'Tabular figures', pnum: 'Proportional figures',
+      frac: 'Fractions', ordn: 'Ordinals', sups: 'Superscript', subs: 'Subscript',
+      sinf: 'Scientific inferiors', numr: 'Numerators', dnom: 'Denominators',
+      zero: 'Slashed zero', case: 'Case-sensitive forms', ornm: 'Ornaments', falt: 'Final alternates'
+    };
+    // Not offered as switches: shaping plumbing the browser applies on its own,
+    // and figure/position variants that have nothing to do with letterforms.
+    const SKIP = new Set(['aalt', 'ccmp', 'locl', 'rlig', 'rclt', 'rvrn', 'nalt', 'vert', 'vrt2', 'vrtr',
+      'sups', 'subs', 'sinf', 'numr', 'dnom', 'frac', 'afrc', 'ordn', 'lnum', 'onum', 'pnum', 'tnum', 'zero', 'case']);
+    // Not offered as per-letter alternates: figure/position variants, not letterforms.
+    const NOALT = new Set(['ccmp', 'locl', 'rvrn', 'rlig', 'sups', 'subs', 'sinf', 'numr', 'dnom', 'frac',
+      'ordn', 'lnum', 'onum', 'pnum', 'tnum', 'case', 'smcp', 'c2sc', 'pcap', 'c2pc', 'zero']);
+    const DEFAULT_ON = new Set(['liga', 'clig', 'calt']);
+    const ORDER = ['swsh', 'cswh', 'salt', 'titl', 'liga', 'dlig', 'hlig', 'calt', 'clig', 'init', 'medi', 'fina', 'isol'];
+
+    function featName(tag) {
+      let m = /^ss(\d\d)$/.exec(tag);
+      if (m) return 'Stylistic set ' + Number(m[1]);
+      m = /^cv(\d\d)$/.exec(tag);
+      if (m) return 'Character variant ' + Number(m[1]);
+      return NAMES[tag] || tag;
+    }
+    function rank(tag) {
+      const i = ORDER.indexOf(tag);
+      if (i >= 0) return i < 3 ? i : i + 200;        // swashes first, ligature/contextual group later
+      if (/^ss\d\d$/.test(tag)) return 10 + Number(tag.slice(2));
+      if (/^cv\d\d$/.test(tag)) return 40 + Number(tag.slice(2));
+      return tag === 'aalt' ? 999 : 500;
+    }
+    const byRank = (a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0);
+    const defaultOn = (tag) => DEFAULT_ON.has(tag);
+    const okTag = (tag) => typeof tag === 'string' && /^[A-Za-z0-9]{4}$/.test(tag);
+    const fail = (reason) => Object.assign(new Error(reason), { reason });
+
+    function loadLib() {
+      if (window.opentype) return Promise.resolve();
+      if (!libP) {
+        libP = new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = LIB;
+          s.onload = () => (window.opentype ? resolve() : reject(fail('lib')));
+          s.onerror = () => { s.remove(); reject(fail('lib')); };
+          (document.head || document.body).appendChild(s);
+        });
+        libP.catch(() => { libP = null; });
+      }
+      return libP;
+    }
+
+    // ---- saved choices ----
+    function update(label, fn) {
+      const all = Object.assign({}, S.swash);
+      const p = all[label] ? JSON.parse(JSON.stringify(all[label])) : {};
+      p.f = p.f || {};
+      fn(p);
+      const some = (o) => !!o && Object.keys(o).length > 0;
+      if (!some(p.p) && !some(p.s)) { delete p.t; delete p.p; delete p.s; }
+      if (some(p.f) || p.t !== undefined) all[label] = p; else delete all[label];
+      Store.set({ swash: all });
+    }
+    function reset(label) {
+      if (!S.swash[label]) return;
+      const all = Object.assign({}, S.swash);
+      delete all[label];
+      Store.set({ swash: all });
+    }
+    const isOn = (label, tag) => {
+      const p = S.swash[label];
+      return p && p.f && tag in p.f ? !!p.f[tag] : defaultOn(tag);
+    };
+
+    // font-feature-settings value for the saved font-wide switches.
+    const css = (m) => Object.keys(m).filter(okTag).map(t => '"' + t + '" ' + (Number(m[t]) || 0)).join(', ');
+    const ffs = (f) => css(f || {});
+    // ...and for one picked letter or stroke: the pick alone decides the
+    // letterform, so font-wide alternate switches are left off for it and only
+    // the joining behaviour (ligatures, contextual forms) carries over.
+    const JOINING = new Set(['liga', 'clig', 'dlig', 'hlig', 'calt']);
+    function pickFfs(f, tag, value) {
+      const m = {};
+      for (const t in f || {}) if (JOINING.has(t)) m[t] = f[t];
+      if (tag) m[tag] = value;
+      return css(m);
+    }
+
+    // Draw `text` into `el` with the font's saved switches; letters with a
+    // pick, and strokes attached after a letter, become their own spans.
+    // Picks only apply to the exact text they were made on.
+    function render(el, label, text) {
+      const p = S.swash[label];
+      el.textContent = '';
+      el.style.fontFeatureSettings = p ? ffs(p.f) : '';
+      const live = !!p && p.t === text;
+      const picks = (live && p.p) || {};
+      const strokes = (live && p.s) || {};
+      let buf = '';
+      const flush = () => { if (buf) { el.appendChild(document.createTextNode(buf)); buf = ''; } };
+      const span = (cls, rec, i) => {
+        const sp = document.createElement('span');
+        sp.className = cls;
+        sp.dataset.i = i;
+        sp.textContent = String(rec[0]);
+        sp.style.fontFeatureSettings = pickFfs(p.f, rec[1], rec[2]);
+        if (rec[3] != null) sp.dataset.g = rec[3];
+        return sp;
+      };
+      for (let i = 0; i < text.length;) {
+        const ch = String.fromCodePoint(text.codePointAt(i));
+        if (Array.isArray(picks[i])) { flush(); el.appendChild(span('fm-pick', picks[i], i)); }
+        else buf += ch;
+        if (Array.isArray(strokes[i])) { flush(); el.appendChild(span('fm-stroke', strokes[i], i)); }
+        i += ch.length;
+      }
+      flush();
+    }
+
+    // One entry per drawn letter (and attached stroke) with its layout box.
+    function units(el, text) {
+      const out = [];
+      const range = document.createRange();
+      const box = (node) => { range.selectNodeContents(node); return range.getClientRects()[0] || null; };
+      let i = 0;
+      for (const node of el.childNodes) {
+        if (node.nodeType === 3) {
+          const d = node.data;
+          for (let o = 0; o < d.length;) {
+            const ch = String.fromCodePoint(d.codePointAt(o));
+            range.setStart(node, o);
+            range.setEnd(node, o + ch.length);
+            out.push({ i, ch, rect: range.getClientRects()[0] || null });
+            o += ch.length;
+            i += ch.length;
+          }
+        } else if (node.classList && node.classList.contains('fm-pick')) {
+          i = Number(node.dataset.i);
+          const ch = String.fromCodePoint(text.codePointAt(i) || 32);
+          out.push({ i, ch, rect: box(node), g: node.dataset.g });
+          i += ch.length;
+        } else if (node.classList && node.classList.contains('fm-stroke')) {
+          out.push({ i: Number(node.dataset.i), stroke: true, rect: box(node), g: node.dataset.g });
+        }
+      }
+      return out;
+    }
+
+    // Where the ink really lands: each letter's layout box widened by the
+    // outline bounds of the glyph(s) that can appear there. Swashes reach far
+    // outside the layout box, so fitting has to use this instead.
+    // With `only`, just the letter at that index is measured (its own ink).
+    function inkBox(el, info, label, text, only) {
+      const size = parseFloat(getComputedStyle(el).fontSize);
+      if (!size || !info.upm) return null;
+      const us = units(el, text);
+      const first = us.find(u => u.rect);
+      if (!first) return null;
+      // Distance from a letter box's top down to the baseline. Measured on an
+      // out-of-flow copy: anything inserted into the text itself would hand
+      // the line breaker a new place to wrap.
+      const probe = document.createElement('span');
+      probe.className = 'fm-probe';
+      probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;padding:0;font-feature-settings:normal';
+      const mark = document.createElement('span');
+      mark.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+      const sample = document.createTextNode((us.find(u => u.rect && !u.stroke && u.ch.trim()) || { ch: 'x' }).ch);
+      probe.appendChild(mark);
+      probe.appendChild(sample);
+      el.appendChild(probe);
+      const range = document.createRange();
+      range.selectNodeContents(sample);
+      const sr = range.getClientRects()[0];
+      const baseOff = sr ? mark.getBoundingClientRect().bottom - sr.top : 0;
+      probe.remove();
+      const s = size / info.upm;
+      const on = info.features.filter(tag => isOn(label, tag));
+      let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+      for (const u of us) {
+        const r = u.rect;
+        if (!r) continue;
+        const picked = u.g != null && u.g !== '';
+        if (only != null && (u.stroke || u.i !== only)) continue;
+        // sideways the advance box counts; vertically only real outlines do
+        // (a script font's line box is far taller than its ink)
+        if (only == null) { L = Math.min(L, r.left); R = Math.max(R, r.right); }
+        const glyphs = [];
+        if (picked) glyphs.push(Number(u.g));
+        if (!u.stroke && !(picked && only != null)) {
+          const gi = info.glyphOf(u.ch);
+          if (gi) {
+            glyphs.push(gi);
+            if (!picked) for (const tag of on) {
+              const m = info.subs.get(tag);
+              const a = m && m.get(gi);
+              if (a) glyphs.push(a[0]);
+            }
+          }
+        }
+        const base = r.top + baseOff;
+        for (const g of glyphs) {
+          const bb = info.bbox(g);
+          if (!bb) continue;
+          L = Math.min(L, r.left + bb.x1 * s); R = Math.max(R, r.left + bb.x2 * s);
+          T = Math.min(T, base - bb.y2 * s); B = Math.max(B, base - bb.y1 * s);
+        }
+        if (only != null && L === Infinity) { L = r.left; R = r.right; T = r.top; B = r.bottom; }
+      }
+      if (L === Infinity) return null;
+      if (T === Infinity) { T = first.rect.top; B = first.rect.bottom; } // nothing with an outline
+      return { left: L, top: T, right: R, bottom: B, w: R - L, h: B - T };
+    }
+
+    // Grow an element's padding until swash ink stays inside it (Compare tiles).
+    function padInk(el, info, label, text) {
+      if (!el.dataset.pad) {
+        const cs = getComputedStyle(el);
+        el.dataset.pad = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map(parseFloat).join(',');
+      }
+      const base = el.dataset.pad.split(',').map(Number);
+      const extra = [0, 0, 0, 0];
+      const apply = () => { el.style.padding = base.map((b, k) => (b + extra[k]) + 'px').join(' '); };
+      apply();
+      for (let k = 0; k < 3; k++) {
+        const ink = inkBox(el, info, label, text);
+        if (!ink) return;
+        const r = el.getBoundingClientRect();
+        const need = [r.top + 6 - ink.top, ink.right - (r.right - 6), ink.bottom - (r.bottom - 6), r.left + 6 - ink.left];
+        if (!need.some(n => n > 0.5)) return;
+        need.forEach((n, j) => { if (n > 0.5) extra[j] += Math.ceil(n); });
+        apply();
+      }
+    }
+
+    // ---- reading the font file ----
+    // Rebuild one face of a .ttc collection as a standalone font.
+    function ttcFace(buf, off) {
+      const dv = new DataView(buf);
+      const n = dv.getUint16(off + 4);
+      const recs = [];
+      let pos = 12 + 16 * n;
+      for (let i = 0; i < n; i++) {
+        const r = off + 12 + 16 * i;
+        const rec = { tag: dv.getUint32(r), sum: dv.getUint32(r + 4), from: dv.getUint32(r + 8), len: dv.getUint32(r + 12), to: pos };
+        pos += (rec.len + 3) & ~3;
+        recs.push(rec);
+      }
+      const out = new Uint8Array(pos);
+      const odv = new DataView(out.buffer);
+      out.set(new Uint8Array(buf, off, 12), 0);
+      recs.forEach((rec, i) => {
+        const r = 12 + 16 * i;
+        odv.setUint32(r, rec.tag); odv.setUint32(r + 4, rec.sum);
+        odv.setUint32(r + 8, rec.to); odv.setUint32(r + 12, rec.len);
+        out.set(new Uint8Array(buf, rec.from, rec.len), rec.to);
+      });
+      return out.buffer;
+    }
+
+    function parseOne(buf) {
+      try { return window.opentype.parse(buf, { lowMemory: true }); }
+      catch (e) { return window.opentype.parse(buf); }
+    }
+
+    function parseFont(buf, psName) {
+      const dv = new DataView(buf);
+      const sig = dv.byteLength >= 12 ? dv.getUint32(0) : 0;
+      if (sig === 0x774F4632) throw fail('woff2');
+      try {
+        if (sig !== 0x74746366) return parseOne(buf);
+        const n = dv.getUint32(8);
+        let firstOk = null;
+        for (let i = 0; i < n && i < 32; i++) {
+          let font = null;
+          try { font = parseOne(ttcFace(buf, dv.getUint32(12 + 4 * i))); } catch (e) { continue; }
+          firstOk = firstOk || font;
+          const ps = font.names && font.names.postScriptName;
+          if (psName && ps && Object.keys(ps).some(k => ps[k] === psName)) return font;
+        }
+        if (firstOk) return firstOk;
+        throw fail('parse');
+      } catch (e) {
+        throw e && e.reason ? e : fail('parse');
+      }
+    }
+
+    function covGlyphs(c) {
+      if (!c) return [];
+      if (c.format === 1) return c.glyphs || [];
+      const out = [];
+      for (const r of c.ranges || []) for (let g = r.start; g <= r.end; g++) out.push(g);
+      return out;
+    }
+
+    function build(font) {
+      const gsub = font.tables && font.tables.gsub;
+      const cmap = (font.tables && font.tables.cmap && font.tables.cmap.glyphIndexMap) || {};
+      const rev = new Map(); // glyph -> a codepoint that produces it
+      for (const k in cmap) if (!rev.has(cmap[k])) rev.set(cmap[k], Number(k));
+
+      const subs = new Map();   // feature tag -> Map(glyph -> [alternate glyphs])
+      const ligs = [];          // { tag, comps: [glyphs], g }
+      const anyOut = new Set(); // every glyph some substitution can produce
+      const feats = new Set();
+      const add = (tag, g, arr) => {
+        let m = subs.get(tag);
+        if (!m) { m = new Map(); subs.set(tag, m); }
+        if (!m.has(g)) m.set(g, arr);
+      };
+      const walk = (lookup, tag) => {
+        for (let st of lookup.subtables || []) {
+          let type = lookup.lookupType;
+          if (type === 7 && st && st.extension) { type = st.lookupType; st = st.extension; }
+          if (!st) continue;
+          const cov = covGlyphs(st.coverage);
+          if (type === 1) {
+            cov.forEach((g, i) => {
+              const o = st.substFormat === 1 ? (g + st.deltaGlyphId) & 0xFFFF : (st.substitute || [])[i];
+              if (o == null) return;
+              anyOut.add(o);
+              if (tag) add(tag, g, [o]);
+            });
+          } else if (type === 2) {
+            (st.sequences || []).forEach(seq => (seq || []).forEach(o => anyOut.add(o)));
+          } else if (type === 3) {
+            cov.forEach((g, i) => {
+              const a = (st.alternateSets || [])[i] || [];
+              a.forEach(o => anyOut.add(o));
+              if (tag && a.length) add(tag, g, a);
+            });
+          } else if (type === 4) {
+            cov.forEach((g, i) => ((st.ligatureSets || [])[i] || []).forEach(l => {
+              anyOut.add(l.ligGlyph);
+              if (tag) ligs.push({ tag, comps: [g].concat(l.components || []), g: l.ligGlyph });
+            }));
+          }
+        }
+      };
+      if (gsub) {
+        const lookups = gsub.lookups || [];
+        lookups.forEach(lk => walk(lk, null));
+        const seen = new Set();
+        for (const fr of gsub.features || []) {
+          const tag = fr.tag;
+          if (!okTag(tag)) continue;
+          const idxs = (fr.feature && fr.feature.lookupListIndexes) || [];
+          if (idxs.length && !SKIP.has(tag)) feats.add(tag);
+          if (NOALT.has(tag)) continue;
+          for (const li of idxs) {
+            const key = tag + ':' + li;
+            if (seen.has(key) || !lookups[li]) continue;
+            seen.add(key);
+            walk(lookups[li], tag);
+          }
+        }
+      }
+
+      const str = (cp) => String.fromCodePoint(cp);
+      const isLetter = (cp) => /\p{L}/u.test(str(cp));
+      const isSpace = (cp) => /\s/.test(str(cp));
+      const nameOf = (g) => { try { return font.glyphs.get(g).name || ''; } catch (e) { return ''; } };
+      const pushTo = (map, key, rec) => { const a = map.get(key); if (a) a.push(rec); else map.set(key, [rec]); };
+
+      // Ligatures typed as "letter + symbol/digit" are alternates of that letter;
+      // ligatures typed from symbols alone and producing an unencoded glyph are
+      // standalone strokes (e.g. "_1" -> a tail).
+      const ligAlts = new Map();
+      const strokes = [];
+      const strokeGlyphs = new Set();
+      for (const l of ligs) {
+        const cps = l.comps.map(g => rev.get(g));
+        if (cps.length < 2 || cps.some(cp => cp == null || isSpace(cp))) continue;
+        const r = cps.map(str).join('');
+        const restSym = cps.slice(1).every(cp => !isLetter(cp));
+        if (isLetter(cps[0])) {
+          if (restSym) pushTo(ligAlts, l.comps[0], { r, tag: l.tag, v: 1, g: l.g });
+        } else if (restSym && !rev.has(l.g) && !strokeGlyphs.has(l.g) && !/^[\d\/⁄.,\-]+$/.test(r)) {
+          strokeGlyphs.add(l.g);
+          strokes.push({ r, tag: l.tag, v: 1, g: l.g });
+        }
+      }
+
+      // Private-use glyphs: "a.swash" style names are alternates of that letter;
+      // ones no feature reaches are standalone strokes/ornaments.
+      const nameAlts = new Map();
+      const pua = [];
+      for (const k in cmap) {
+        const cp = Number(k);
+        if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000) pua.push(cp);
+      }
+      if (pua.length && pua.length <= 4000) {
+        const baseByName = new Map();
+        for (const k in cmap) {
+          const cp = Number(k);
+          if (cp >= 0x250 || !isLetter(cp)) continue;
+          const nm = nameOf(cmap[k]);
+          if (nm && !baseByName.has(nm)) baseByName.set(nm, cmap[k]);
+        }
+        for (const cp of pua) {
+          const g = cmap[cp];
+          const nm = nameOf(g);
+          const m = /^([^.]+)\.(.+)$/.exec(nm);
+          if (m && baseByName.has(m[1])) { pushTo(nameAlts, baseByName.get(m[1]), { r: str(cp), tag: '', v: 0, g }); continue; }
+          if (anyOut.has(g) || strokeGlyphs.has(g)) continue;
+          if (nm.includes('_') && nm.split('_').every(part => baseByName.has(part.split('.')[0]))) continue;
+          if (strokes.length < 160) { strokeGlyphs.add(g); strokes.push({ r: str(cp), tag: '', v: 0, g }); }
+        }
+      }
+
+      const glyphOf = (ch) => cmap[ch.codePointAt(0)] || 0;
+      const altTags = [...subs.keys()].sort(byRank);
+      function altsFor(ch) {
+        const gi = glyphOf(ch);
+        if (!gi) return [];
+        const out = [];
+        const seenG = new Set([gi]);
+        const take = (rec) => { if (!seenG.has(rec.g)) { seenG.add(rec.g); out.push(rec); } };
+        for (const tag of altTags) {
+          const a = subs.get(tag).get(gi);
+          if (a) a.forEach((g, k) => take({ r: ch, tag, v: k + 1, g }));
+        }
+        (ligAlts.get(gi) || []).forEach(take);
+        (nameAlts.get(gi) || []).forEach(take);
+        return out.slice(0, 90);
+      }
+
+      const boxes = new Map();
+      function bbox(g) {
+        if (boxes.has(g)) return boxes.get(g);
+        let bb = null;
+        try {
+          const b = font.glyphs.get(g).getBoundingBox();
+          if (b && [b.x1, b.y1, b.x2, b.y2].every(Number.isFinite) && (b.x2 > b.x1 || b.y2 > b.y1)) bb = b;
+        } catch (e) {}
+        boxes.set(g, bb);
+        return bb;
+      }
+      const advance = (g) => { try { return font.glyphs.get(g).advanceWidth || 0; } catch (e) { return 0; } };
+
+      return {
+        upm: font.unitsPerEm || 1000,
+        features: [...feats].sort(byRank),
+        subs, strokes, glyphOf, altsFor, bbox, advance,
+        pickable: subs.size > 0 || ligAlts.size > 0 || nameAlts.size > 0 || strokes.length > 0
+      };
+    }
+
+    // Read and index a font. Rejects with .reason: 'needs-load' | 'no-file' |
+    // 'woff2' | 'lib' | 'parse'.
+    function analyze(entry) {
+      const hit = cache.get(entry.label);
+      if (hit) return hit;
+      const p = (async () => {
+        const src = await FontLoader.fontData(entry);
+        if (!src) throw fail(FontLoader.canLoadLocal() ? 'needs-load' : 'no-file');
+        await loadLib();
+        return build(parseFont(src.buf, src.name));
+      })();
+      cache.set(entry.label, p);
+      p.catch(() => { if (cache.get(entry.label) === p) cache.delete(entry.label); });
+      return p;
+    }
+
+    return {
+      analyze, render, units, inkBox, padInk, update, reset, isOn, defaultOn, featName, ffs, pickFfs,
+      forget: (label) => cache.delete(label)
+    };
   })();
 
   /* ============ (5) Grid ============ */
@@ -1126,6 +1707,17 @@
     const overlay = $('#zoomOverlay');
     const stage = $('#zoomStage');
     const textEl = $('#zoomText');
+    const featEl = $('#zoomFeat');
+    const pickEl = $('#zoomPick');
+    const selEl = $('#zoomSel');
+    const resetBtn = $('#zoomReset');
+    const hintEl = $('#zoomHint');
+    let cur = null;      // font entry on show
+    let info = null;     // its parsed swash data, once read
+    let text = '';       // the string on show (case applied)
+    let sel = -1;        // index in `text` of the selected letter
+    let token = 0;       // guards async font reads against a newer open/close
+    let reloading = false;
 
     const isOpen = () => overlay.classList.contains('open');
 
@@ -1143,46 +1735,314 @@
       overlay.style.height = (Math.min(r.bottom, window.innerHeight) - top) + 'px';
     }
 
+    const PAD = 40; // clear margin kept between the ink and the stage edge
+
     // Largest font size where the sample still fits the stage, backed off
-    // so swashes and overshoots outside the em box aren't clipped.
+    // so overshoots outside the em box aren't clipped. Once the font file has
+    // been read, the real outline bounds (swashes included) are fitted too.
     function fit() {
-      const availW = stage.clientWidth - 80;
-      const availH = stage.clientHeight - 80;
-      let lo = 8, hi = 1200;
-      while (hi - lo > 1) {
-        const mid = (lo + hi) >> 1;
-        textEl.style.fontSize = mid + 'px';
+      textEl.style.transform = '';
+      const availW = stage.clientWidth - PAD * 2;
+      const availH = stage.clientHeight - PAD * 2;
+      if (availW <= 0 || availH <= 0) return;
+      // Ink that overshoots the text box becomes padding in em, so it scales
+      // with the size being tried and line wrapping accounts for it.
+      const pad = [0, 0, 0, 0]; // top, right, bottom, left
+      let size = 8;
+      let ink = null;
+      for (let pass = 0; pass < 4; pass++) {
+        textEl.style.padding = pad.map(v => v.toFixed(3) + 'em').join(' ');
+        let lo = 8, hi = 1200;
+        while (hi - lo > 1) {
+          const mid = (lo + hi) >> 1;
+          textEl.style.fontSize = mid + 'px';
+          const r = textEl.getBoundingClientRect();
+          // half-pixel slack: a wrapped block is exactly as wide as the stage,
+          // and sub-pixel rounding must not reject it
+          if (r.width <= availW + 0.5 && r.height <= availH + 0.5) lo = mid; else hi = mid;
+        }
+        size = Math.max(8, Math.floor(lo * 0.85));
+        textEl.style.fontSize = size + 'px';
+        ink = info ? Swash.inkBox(textEl, info, cur.label, text) : null;
+        if (!ink) break;
         const r = textEl.getBoundingClientRect();
-        if (r.width <= availW && r.height <= availH) lo = mid; else hi = mid;
+        const over = [r.top - ink.top, ink.right - r.right, ink.bottom - r.bottom, r.left - ink.left];
+        if (!over.some(n => n > 0.5)) break;
+        over.forEach((n, k) => { if (n > 0.5) pad[k] += (n + 1) / size; });
       }
-      const size = Math.max(8, Math.floor(lo * 0.85));
-      textEl.style.fontSize = size + 'px';
+      if (ink) {
+        // last resort if the passes didn't settle: slide the ink back inside
+        const sr = stage.getBoundingClientRect();
+        let dx = 0, dy = 0;
+        if (ink.left < sr.left + PAD - 1) dx = sr.left + PAD - ink.left;
+        else if (ink.right > sr.right - PAD + 1) dx = sr.right - PAD - ink.right;
+        if (ink.top < sr.top + PAD - 1) dy = sr.top + PAD - ink.top;
+        else if (ink.bottom > sr.bottom - PAD + 1) dy = sr.bottom - PAD - ink.bottom;
+        if (dx || dy) textEl.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+      }
       $('#zoomSize').textContent = size + 'px';
+      positionSel();
+    }
+
+    function draw() {
+      text = applyCase(S.previewText.trim() || cur.label);
+      Swash.render(textEl, cur.label, text);
+      resetBtn.hidden = !S.swash[cur.label];
+      fit();
+    }
+
+    function view() {
+      overlay.classList.toggle('negative', S.negative);
+      if (S.textColor) overlay.style.setProperty('--pv-ink', S.textColor);
+      else overlay.style.removeProperty('--pv-ink');
+    }
+
+    // ---- feature switches ----
+    function note(msg, btnLabel, onClick) {
+      featEl.textContent = '';
+      const s = document.createElement('span');
+      s.className = 'note';
+      s.textContent = msg;
+      featEl.appendChild(s);
+      if (btnLabel) {
+        const b = document.createElement('button');
+        b.className = 'btn';
+        b.textContent = btnLabel;
+        b.addEventListener('click', onClick);
+        featEl.appendChild(b);
+      }
+    }
+
+    function renderFeat() {
+      featEl.textContent = '';
+      hintEl.hidden = true;
+      stage.classList.toggle('pickable', !!info && info.pickable);
+      if (!info) return;
+      if (!info.features.length && !info.pickable) { note('This font has no swashes or alternates.'); return; }
+      info.features.forEach(tag => {
+        const on = Swash.isOn(cur.label, tag);
+        const b = document.createElement('button');
+        b.className = 'chip' + (on ? ' on' : '');
+        b.textContent = Swash.featName(tag);
+        b.title = '“' + tag + '” — click to turn ' + (on ? 'off' : 'on');
+        b.setAttribute('aria-pressed', String(on));
+        b.addEventListener('click', () => {
+          Swash.update(cur.label, p => {
+            if (!on === Swash.defaultOn(tag)) delete p.f[tag]; else p.f[tag] = on ? 0 : 1;
+          });
+          renderFeat();
+          draw();
+          if (sel >= 0) openPicker();
+        });
+        featEl.appendChild(b);
+      });
+      hintEl.hidden = !info.pickable;
+    }
+
+    async function loadInfo() {
+      const my = ++token;
+      const font = cur;
+      info = null;
+      stage.classList.remove('pickable');
+      hintEl.hidden = true;
+      note('Reading font…');
+      try {
+        const got = await Swash.analyze(font);
+        if (my !== token) return;
+        info = got;
+        renderFeat();
+        fit();
+      } catch (e) {
+        if (my !== token) return;
+        const why = e && e.reason;
+        if (why === 'needs-load') note('To pick swashes, Fontmark needs to read this font’s file.', 'Load installed fonts', loadAndReopen);
+        else if (why === 'no-file') note('Swash controls need the font file — drop its .ttf or .otf onto the page to use them.');
+        else if (why === 'woff2') note('Swash controls can’t read .woff2 files — upload the .ttf or .otf instead.');
+        else if (why === 'lib') note('Couldn’t load the font reader — swash controls need an internet connection the first time.', 'Retry', loadInfo);
+        else note('Couldn’t read this font’s swash data.');
+      }
+    }
+
+    // The detected set is known by name only; after the user grants access the
+    // same font comes back with a readable file, so reopen it from the new list.
+    async function loadAndReopen() {
+      const label = cur.label;
+      reloading = true;
+      try { await FontLoader.loadLocalFonts(); } finally { reloading = false; }
+      if (!isOpen() || !cur || cur.label !== label) return;
+      if (S.fontSource !== 'local') { loadInfo(); return; }
+      const want = label.toLowerCase();
+      const match = S.fonts.find(f => f.label === label) ||
+        S.fonts.find(f => f.label.toLowerCase() === want) ||
+        S.fonts.find(f => f.label.toLowerCase() + ' regular' === want);
+      if (match) open(match.label);
+      else { close(); toast('Installed fonts loaded — open “' + label + '” again to set its swashes.'); }
+    }
+
+    // ---- per-letter picker ----
+    function positionSel() {
+      const u = sel >= 0 && isOpen() ? Swash.units(textEl, text).find(x => !x.stroke && x.i === sel) : null;
+      if (!u || !u.rect) { sel = -1; selEl.hidden = true; pickEl.hidden = true; return; }
+      const o = overlay.getBoundingClientRect();
+      // hug the letter's ink when the outlines are known, else its layout box
+      const ink = info ? Swash.inkBox(textEl, info, cur.label, text, sel) : null;
+      const r = ink || { left: u.rect.left, top: u.rect.top, right: u.rect.right, bottom: u.rect.bottom, w: u.rect.width, h: u.rect.height };
+      const m = 6;
+      selEl.hidden = false;
+      selEl.style.left = (r.left - o.left - m) + 'px';
+      selEl.style.top = (r.top - o.top - m) + 'px';
+      selEl.style.width = (r.w + m * 2) + 'px';
+      selEl.style.height = (r.h + m * 2) + 'px';
+      if (pickEl.hidden) return;
+      const pw = pickEl.offsetWidth, ph = pickEl.offsetHeight;
+      const left = Math.max(8, Math.min(o.width - pw - 8, r.left - o.left + r.w / 2 - pw / 2));
+      let top = r.bottom - o.top + m + 8;
+      if (top + ph > o.height - 8) top = r.top - o.top - m - ph - 8;
+      if (top < 8) top = Math.max(8, o.height - ph - 8);
+      pickEl.style.left = left + 'px';
+      pickEl.style.top = top + 'px';
+    }
+
+    function cell(rec, active, onClick, plain, wide) {
+      const b = document.createElement('button');
+      b.className = 'pk' + (active ? ' on' : '') + (wide ? ' wide' : '');
+      if (plain) {
+        b.classList.add('pk-none');
+        b.textContent = plain;
+      } else {
+        const sp = document.createElement('span');
+        sp.textContent = rec.r;
+        applyFont(sp, cur);
+        const p = S.swash[cur.label];
+        sp.style.fontFeatureSettings = rec.auto ? Swash.ffs(p && p.f) : Swash.pickFfs(p && p.f, rec.tag, rec.v);
+        // shrink and re-centre glyphs whose ink is wider than the cell
+        const bb = rec.g != null ? info.bbox(rec.g) : null;
+        if (bb) {
+          const base = 26, cw = wide ? 88 : 46, chh = 40;
+          const w = (bb.x2 - bb.x1) * base / info.upm, h = (bb.y2 - bb.y1) * base / info.upm;
+          const k = Math.min(1, cw / Math.max(w, 1), chh / Math.max(h, 1));
+          const fs = Math.max(7, base * k);
+          sp.style.fontSize = fs + 'px';
+          const dx = (info.advance(rec.g) / 2 - (bb.x1 + bb.x2) / 2) * fs / info.upm;
+          if (Math.abs(dx) > 0.5) { sp.style.display = 'inline-block'; sp.style.transform = 'translateX(' + dx.toFixed(1) + 'px)'; }
+        }
+        b.appendChild(sp);
+        b.title = rec.tag ? Swash.featName(rec.tag) + (rec.v > 1 ? ' · ' + rec.v : '') : (rec.title || '');
+      }
+      b.addEventListener('click', onClick);
+      return b;
+    }
+
+    function setPick(kind, rec) {
+      Swash.update(cur.label, p => {
+        if (p.t !== text) { p.t = text; p.p = {}; p.s = {}; }
+        const m = kind === 'p' ? (p.p = p.p || {}) : (p.s = p.s || {});
+        if (rec) m[sel] = [rec.r, rec.tag, rec.v, rec.g]; else delete m[sel];
+      });
+      const keep = sel;
+      draw();
+      sel = keep;
+      openPicker();
+    }
+
+    function openPicker() {
+      if (!info || sel < 0) return;
+      const ch = String.fromCodePoint(text.codePointAt(sel));
+      const p = S.swash[cur.label];
+      const live = !!p && p.t === text;
+      const curPick = (live && p.p && p.p[sel]) || null;
+      const curStroke = (live && p.s && p.s[sel]) || null;
+      const same = (saved, rec) => !!saved && saved[0] === rec.r && saved[1] === rec.tag && saved[2] === rec.v;
+      const heading = (t) => { const l = document.createElement('span'); l.className = 'label'; l.textContent = t; pickEl.appendChild(l); };
+      const row = () => { const d = document.createElement('div'); d.className = 'pk-row'; pickEl.appendChild(d); return d; };
+      pickEl.textContent = '';
+
+      const alts = info.altsFor(ch);
+      heading('Alternates for “' + ch + '”');
+      if (alts.length) {
+        const r = row();
+        r.appendChild(cell({ r: ch, tag: '', v: 0, g: info.glyphOf(ch), auto: true, title: 'Default — follows the switches above' }, !curPick, () => setPick('p', null)));
+        alts.forEach(a => r.appendChild(cell(a, same(curPick, a), () => setPick('p', a))));
+      } else {
+        const n = document.createElement('span');
+        n.className = 'note';
+        n.textContent = 'This font has no alternates for this letter.';
+        pickEl.appendChild(n);
+      }
+      if (info.strokes.length) {
+        heading('Add stroke after');
+        const r = row();
+        r.appendChild(cell(null, !curStroke, () => setPick('s', null), 'None'));
+        info.strokes.forEach(st => r.appendChild(cell(st, same(curStroke, st), () => setPick('s', st), '', true)));
+      }
+      pickEl.hidden = false;
+      pickEl.scrollTop = 0;
+      positionSel();
+    }
+
+    function select(i) {
+      sel = i;
+      if (i < 0) { selEl.hidden = true; pickEl.hidden = true; return; }
+      openPicker();
     }
 
     function open(label) {
       const font = S.fonts.find(f => f.label === label);
       if (!font) return;
+      cur = font;
+      info = null;
+      sel = -1;
+      selEl.hidden = true;
+      pickEl.hidden = true;
       $('#zoomName').textContent = font.label;
-      textEl.textContent = S.previewText.trim() || font.label;
       applyFont(textEl, font);
-      overlay.classList.toggle('negative', S.negative);
-      overlay.classList.toggle('case-upper', S.caseMode === 'upper');
-      overlay.classList.toggle('case-lower', S.caseMode === 'lower');
-      if (S.textColor) overlay.style.setProperty('--pv-ink', S.textColor);
-      else overlay.style.removeProperty('--pv-ink');
+      view();
       place();
       overlay.classList.add('open');
-      fit();
+      draw();
+      loadInfo();
     }
 
-    function close() { overlay.classList.remove('open'); }
+    function close() {
+      overlay.classList.remove('open');
+      token++;
+      sel = -1;
+      selEl.hidden = true;
+      pickEl.hidden = true;
+    }
 
+    // Preview text, case, colour or the font list changed while the popup is up.
+    function refresh() {
+      if (!isOpen() || !cur || reloading) return;
+      const font = S.fonts.find(f => f.label === cur.label);
+      if (!font) { close(); return; }
+      if (font !== cur) { open(font.label); return; }
+      view();
+      select(-1);
+      draw();
+    }
+
+    stage.addEventListener('click', (e) => {
+      if (!info || !info.pickable) return;
+      const x = e.clientX, y = e.clientY;
+      const hit = Swash.units(textEl, text).find(u => !u.stroke && u.rect && u.ch.trim() &&
+        x >= u.rect.left && x <= u.rect.right && y >= u.rect.top && y <= u.rect.bottom);
+      select(hit ? hit.i : -1);
+    });
+    resetBtn.addEventListener('click', () => {
+      Swash.reset(cur.label);
+      select(-1);
+      renderFeat();
+      draw();
+    });
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     $('#zoomClose').addEventListener('click', close);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) close(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !isOpen()) return;
+      if (sel >= 0) select(-1); else close();
+    });
     window.addEventListener('resize', () => { if (isOpen()) { place(); fit(); } });
-    return { open };
+    return { open, refresh };
   })();
 
   /* ============ (6) Shortlist / tray ============ */
@@ -1533,6 +2393,7 @@
     let picked = [];
     let sample = '';
     let size = 40;
+    let swashed = []; // tiles whose font has swash choices
 
     const isOpen = () => overlay.classList.contains('open');
 
@@ -1588,11 +2449,10 @@
       box.innerHTML = '';
       box.style.setProperty('--cmp-size', size + 'px');
       box.classList.toggle('negative', S.negative);
-      box.classList.toggle('case-upper', S.caseMode === 'upper');
-      box.classList.toggle('case-lower', S.caseMode === 'lower');
       if (S.textColor) box.style.setProperty('--pv-ink', S.textColor);
       else box.style.removeProperty('--pv-ink');
       const byLabel = new Map(S.fonts.map(f => [f.label, f]));
+      swashed = [];
       picked.forEach(fam => {
         const col = document.createElement('div');
         col.className = 'col';
@@ -1602,11 +2462,24 @@
         const sp = document.createElement('div');
         sp.className = 'col-sample';
         const entry = byLabel.get(fam);
-        if (entry) applyFont(sp, entry);
-        sp.textContent = sample || fam;
+        const shown = applyCase(sample || fam);
         col.appendChild(lb);
         col.appendChild(sp);
         box.appendChild(col);
+        if (!entry) { sp.textContent = shown; return; }
+        applyFont(sp, entry);
+        Swash.render(sp, fam, shown);
+        if (S.swash[fam]) swashed.push({ sp, entry, fam, shown });
+      });
+      padSwashed();
+    }
+
+    // Tiles whose font has swash choices: widen the padding so tails aren't clipped.
+    function padSwashed() {
+      swashed.forEach(j => {
+        Swash.analyze(j.entry)
+          .then(info => { if (j.sp.isConnected) Swash.padInk(j.sp, info, j.fam, j.shown); })
+          .catch(() => {});
       });
     }
 
@@ -1615,6 +2488,7 @@
       size = Number(e.target.value);
       $('#cmpSizeVal').textContent = size + 'px';
       $('#cmpCols').style.setProperty('--cmp-size', size + 'px');
+      padSwashed();
     });
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     $('#cmpClose').addEventListener('click', close);
@@ -1776,6 +2650,7 @@
       $('#btnIsolate').setAttribute('aria-pressed', String(S.isolate));
     }
     if (keys.includes('collections')) Collections.renderList();
+    if (['fonts', 'previewText', 'caseMode', 'negative', 'textColor'].some(k => keys.includes(k))) Zoom.refresh();
   });
 
   function updateStatus() {
