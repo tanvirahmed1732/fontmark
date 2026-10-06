@@ -12,7 +12,7 @@ Preview your text in every font on your machine, shortlist favourites, and expor
 - Shortlist, isolate, and drag-to-rank favourites
 - Size slider, case toggle, negative (white-on-black) mode, custom text colour, search
 - Collections with tags (saved in the browser), PNG specimen-sheet export, copy-as-text list, side-by-side compare view
-- Zoom any font into a popup that auto-fits the text on one line (a size slider shrinks it, and **Wrap lines** lets long text break so it can be larger), with **swash controls**: switch OpenType features (swash, stylistic alternates and sets, ligatures) on or off per font, click a letter to pick one of its alternates, and attach standalone tail strokes after a letter. Choices are remembered per font and carry into Compare.
+- Zoom any font into a popup sized to fit on opening; the size then stays put while you type (the text wraps, and scrolls if it outgrows the popup) and changes only with the size slider or **Fit**. It comes with **swash controls**: switch OpenType features (swash, stylistic alternates and sets, ligatures) on or off per font, click a letter to pick one of its alternates, and attach standalone tail strokes after a letter. Choices are remembered per font and carry into Compare.
 
 Swash controls read the font file itself, so they work for uploaded fonts and after **Load all installed fonts** (the canvas-detected set is known by name only). The font parser ([opentype.js](https://github.com/opentypejs/opentype.js)) is fetched from cdnjs the first time the controls are used; `.woff2` uploads can't be read.
 
