@@ -227,7 +227,8 @@
     color: var(--pv-ink, var(--pos-ink));
     word-break: break-word;
     overflow: hidden;
-    display: flex; align-items: center;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
   }
   .grid.negative .preview, .compare-cols.negative .col-sample { background: var(--neg-bg); color: var(--pv-ink, var(--neg-ink)); }
   .grid.case-upper .preview, .case-upper .col-sample, .case-upper .tray-name { text-transform: uppercase; }
@@ -483,6 +484,7 @@
     padding: 14px 12px;
     background: var(--pos-bg); color: var(--pv-ink, var(--pos-ink));
     font-size: var(--cmp-size, 40px); line-height: 1.2; word-break: break-word;
+    text-align: center;
   }
 
   /* upload overlay */
