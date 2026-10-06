@@ -320,15 +320,18 @@
   }
   .zoom-pop .dlg-head { flex: none; }
   .zoom-pop .dlg-head h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* The text keeps its size while you type and wraps to the popup's width;
+     if it outgrows the stage, the stage scrolls. Centring uses auto margins
+     so an overflowing block stays reachable from the top. */
   .zoom-stage {
     flex: 1; min-height: 0;
-    display: flex; align-items: center; justify-content: center;
-    padding: 40px; overflow: hidden;
+    display: flex;
+    padding: 40px; overflow: auto;
     background: var(--pos-bg);
   }
   #zoomOverlay.negative .zoom-stage { background: var(--neg-bg); }
   #zoomText {
-    display: block; max-width: 100%;
+    display: block; margin: auto; max-width: 100%;
     word-break: break-word; text-align: center; line-height: 1.3;
     color: var(--pv-ink, var(--pos-ink));
   }
@@ -340,7 +343,6 @@
   .zoom-tools input[type="range"] { width: 130px; }
   .zoom-tools .zoom-reset { padding: 4px 10px; font-size: 12px; }
   .zoom-tools .zoom-reset[hidden] { display: none; }
-  #zoomText.one-line { white-space: nowrap; max-width: none; }
   .zoom-feat {
     flex: none;
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
@@ -351,8 +353,8 @@
   .zoom-feat:empty { display: none; }
   .zoom-feat .note { font-size: 12px; color: var(--muted); }
   .zoom-feat .btn { padding: 4px 10px; font-size: 12px; }
-  .zoom-stage { position: relative; }
   .zoom-stage.pickable #zoomText { cursor: pointer; }
+  .zoom-pop { position: relative; }
   .zoom-hint {
     position: absolute; left: 0; right: 0; bottom: 11px;
     text-align: center; font-size: 12px; color: #6C7280;
@@ -619,17 +621,15 @@
       <span class="label" id="zoomSize"></span>
       <div class="zoom-tools">
         <span class="label">Size</span>
-        <input id="zoomScale" type="range" min="15" max="100" step="1" value="100" aria-label="Text size" title="Text size — drag left to shrink; far right is the largest that fits">
-        <button class="chip" id="zoomWrap" aria-pressed="false" title="Let long text break onto several lines so it can be larger">Wrap lines</button>
+        <input id="zoomScale" type="range" min="12" max="500" step="1" value="100" aria-label="Text size" title="Text size — stays where you set it; the text wraps to fit">
+        <button class="chip" id="zoomFit" aria-pressed="true" title="Size the text to the largest that fits the popup">Fit</button>
         <button class="btn zoom-reset" id="zoomReset" hidden>Reset swashes</button>
       </div>
       <button class="x" id="zoomClose" aria-label="Close zoom">×</button>
     </div>
     <div id="zoomFeat" class="zoom-feat"></div>
-    <div id="zoomStage" class="zoom-stage">
-      <span id="zoomText"></span>
-      <span id="zoomHint" class="zoom-hint" hidden>Click a letter to pick its swash</span>
-    </div>
+    <div id="zoomStage" class="zoom-stage"><span id="zoomText"></span></div>
+    <span id="zoomHint" class="zoom-hint" hidden>Click a letter to pick its swash</span>
   </div>
   <div id="zoomSel" hidden></div>
   <div id="zoomPick" class="zoom-pick" hidden></div>
@@ -695,7 +695,7 @@
   }
 
   /* ============ (2) Store ============ */
-  const PERSISTED = ['previewText', 'fontSize', 'caseMode', 'negative', 'textColor', 'zoomWrap', 'shortlist', 'collections', 'swash'];
+  const PERSISTED = ['previewText', 'fontSize', 'caseMode', 'negative', 'textColor', 'zoomSize', 'shortlist', 'collections', 'swash'];
   const Store = (() => {
     const state = {
       fonts: [],            // [{family, source:'probed'|'local'|'uploaded', styles?}]
@@ -707,7 +707,7 @@
       caseMode: 'as-typed',
       negative: false,
       textColor: null,
-      zoomWrap: false,      // zoom popup: let text break onto several lines
+      zoomSize: null,       // zoom popup text size in px set with its slider; null = fit on open
       shortlist: [],
       collections: [],
       // per-font swash choices, keyed by font label:
@@ -727,7 +727,7 @@
         if (typeof s.fontSize === 'number') state.fontSize = Math.min(120, Math.max(16, s.fontSize));
         if (['as-typed', 'upper', 'lower'].includes(s.caseMode)) state.caseMode = s.caseMode;
         state.negative = !!s.negative;
-        state.zoomWrap = !!s.zoomWrap;
+        if (typeof s.zoomSize === 'number') state.zoomSize = Math.min(500, Math.max(12, Math.round(s.zoomSize)));
         if (typeof s.textColor === 'string') state.textColor = s.textColor;
         if (Array.isArray(d.shortlist)) state.shortlist = d.shortlist.filter(x => typeof x === 'string');
         if (Array.isArray(d.collections)) state.collections = d.collections.filter(c => c && c.name && Array.isArray(c.fonts));
@@ -740,7 +740,7 @@
           version: 1,
           settings: {
             previewText: state.previewText, fontSize: state.fontSize, caseMode: state.caseMode,
-            negative: state.negative, textColor: state.textColor, zoomWrap: state.zoomWrap
+            negative: state.negative, textColor: state.textColor, zoomSize: state.zoomSize
           },
           shortlist: state.shortlist,
           collections: state.collections,
@@ -1724,8 +1724,9 @@
     const resetBtn = $('#zoomReset');
     const hintEl = $('#zoomHint');
     const scaleEl = $('#zoomScale');
-    const wrapBtn = $('#zoomWrap');
-    let scale = 1;       // size slider, as a fraction of the largest fitting size
+    const fitBtn = $('#zoomFit');
+    const MIN = 12, MAX = 500; // slider range, px
+    let size = 100;      // text size on show; typing never changes it
     let cur = null;      // font entry on show
     let info = null;     // its parsed swash data, once read
     let text = '';       // the string on show (case applied)
@@ -1751,22 +1752,27 @@
 
     const PAD = 40; // clear margin kept between the ink and the stage edge
 
-    // Largest font size where the sample still fits the stage, backed off
-    // so overshoots outside the em box aren't clipped. Once the font file has
-    // been read, the real outline bounds (swashes included) are fitted too.
-    function fit() {
-      textEl.style.transform = '';
-      textEl.classList.toggle('one-line', !S.zoomWrap);
+    // Ink that overshoots the text box (swash tails) becomes padding in em, so
+    // it scales with the font size and line wrapping accounts for it.
+    const setPad = (pad) => { textEl.style.padding = pad.map(v => v.toFixed(3) + 'em').join(' '); };
+    function overshoot(px) {
+      const ink = info ? Swash.inkBox(textEl, info, cur.label, text) : null;
+      if (!ink) return null;
+      const r = textEl.getBoundingClientRect();
+      const over = [r.top - ink.top, ink.right - r.right, ink.bottom - r.bottom, r.left - ink.left];
+      return over.some(n => n > 0.5) ? over.map(n => (n > 0.5 ? (n + 1) / px : 0)) : null;
+    }
+
+    // The largest size at which the current text fits the stage, wrapping
+    // allowed, backed off so overshoots outside the em box aren't clipped.
+    function fitSize() {
       const availW = stage.clientWidth - PAD * 2;
       const availH = stage.clientHeight - PAD * 2;
-      if (availW <= 0 || availH <= 0) return;
-      // Ink that overshoots the text box becomes padding in em, so it scales
-      // with the size being tried and line wrapping accounts for it.
+      if (availW <= 0 || availH <= 0) return size;
       const pad = [0, 0, 0, 0]; // top, right, bottom, left
-      let size = 8;
-      let ink = null;
+      let best = MIN;
       for (let pass = 0; pass < 4; pass++) {
-        textEl.style.padding = pad.map(v => v.toFixed(3) + 'em').join(' ');
+        setPad(pad);
         let lo = 8, hi = 1200;
         while (hi - lo > 1) {
           const mid = (lo + hi) >> 1;
@@ -1776,40 +1782,55 @@
           // and sub-pixel rounding must not reject it
           if (r.width <= availW + 0.5 && r.height <= availH + 0.5) lo = mid; else hi = mid;
         }
-        // `scale` is the size slider: 1 = the largest that fits
-        size = Math.max(8, Math.floor(lo * 0.85 * scale));
-        textEl.style.fontSize = size + 'px';
-        ink = info ? Swash.inkBox(textEl, info, cur.label, text) : null;
-        if (!ink) break;
-        const r = textEl.getBoundingClientRect();
-        const over = [r.top - ink.top, ink.right - r.right, ink.bottom - r.bottom, r.left - ink.left];
-        if (!over.some(n => n > 0.5)) break;
-        over.forEach((n, k) => { if (n > 0.5) pad[k] += (n + 1) / size; });
+        best = Math.min(MAX, Math.max(MIN, Math.floor(lo * 0.85)));
+        textEl.style.fontSize = best + 'px';
+        const more = overshoot(best);
+        if (!more) break;
+        more.forEach((v, k) => { pad[k] += v; });
       }
-      if (ink) {
-        // last resort if the passes didn't settle: slide the ink back inside
-        const sr = stage.getBoundingClientRect();
-        let dx = 0, dy = 0;
-        if (ink.left < sr.left + PAD - 1) dx = sr.left + PAD - ink.left;
-        else if (ink.right > sr.right - PAD + 1) dx = sr.right - PAD - ink.right;
-        if (ink.top < sr.top + PAD - 1) dy = sr.top + PAD - ink.top;
-        else if (ink.bottom > sr.bottom - PAD + 1) dy = sr.bottom - PAD - ink.bottom;
-        if (dx || dy) textEl.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+      return best;
+    }
+
+    // Lay the text out at the current size. The size itself is left alone:
+    // longer text wraps, and past the stage's height the stage scrolls.
+    function layout() {
+      textEl.style.fontSize = size + 'px';
+      const pad = [0, 0, 0, 0];
+      for (let pass = 0; pass < 4; pass++) {
+        setPad(pad);
+        const more = overshoot(size);
+        if (!more) break;
+        more.forEach((v, k) => { pad[k] += v; });
       }
       $('#zoomSize').textContent = size + 'px';
+      scaleEl.value = size;
       positionSel();
     }
 
-    function draw() {
+    const overflows = () => stage.scrollHeight > stage.clientHeight + 1 || stage.scrollWidth > stage.clientWidth + 1;
+
+    // `refit`: 'full' sizes to the largest that fits. 'swash' is for a swash
+    // change: if the text fitted before and the new tails push it past the
+    // stage, step the size down just enough. Otherwise (typing, case, colour)
+    // the size stays exactly as it is. A slider-set size is never overridden.
+    function draw(refit) {
+      const fitted = !overflows();
       text = applyCase(S.previewText.trim() || cur.label);
       Swash.render(textEl, cur.label, text);
       resetBtn.hidden = !S.swash[cur.label];
-      fit();
+      if (S.zoomSize != null) size = S.zoomSize;
+      else if (refit === 'full') size = fitSize();
+      layout();
+      if (S.zoomSize == null && refit === 'swash' && fitted && overflows()) {
+        size = Math.min(size, fitSize());
+        layout();
+      }
     }
 
     function view() {
-      wrapBtn.classList.toggle('on', S.zoomWrap);
-      wrapBtn.setAttribute('aria-pressed', String(S.zoomWrap));
+      const auto = S.zoomSize == null;
+      fitBtn.classList.toggle('on', auto);
+      fitBtn.setAttribute('aria-pressed', String(auto));
       overlay.classList.toggle('negative', S.negative);
       if (S.textColor) overlay.style.setProperty('--pv-ink', S.textColor);
       else overlay.style.removeProperty('--pv-ink');
@@ -1849,7 +1870,7 @@
             if (!on === Swash.defaultOn(tag)) delete p.f[tag]; else p.f[tag] = on ? 0 : 1;
           });
           renderFeat();
-          draw();
+          draw('swash');
           if (sel >= 0) openPicker();
         });
         featEl.appendChild(b);
@@ -1869,7 +1890,7 @@
         if (my !== token) return;
         info = got;
         renderFeat();
-        fit();
+        draw('swash'); // the outlines are known now: make room for any tails
       } catch (e) {
         if (my !== token) return;
         const why = e && e.reason;
@@ -1958,7 +1979,7 @@
         if (rec) m[sel] = [rec.r, rec.tag, rec.v, rec.g]; else delete m[sel];
       });
       const keep = sel;
-      draw();
+      draw('swash');
       sel = keep;
       openPicker();
     }
@@ -2007,7 +2028,6 @@
     function open(label) {
       const font = S.fonts.find(f => f.label === label);
       if (!font) return;
-      if (!cur || cur.label !== label) { scale = 1; scaleEl.value = 100; } // a new font starts at full size
       cur = font;
       info = null;
       sel = -1;
@@ -2018,7 +2038,8 @@
       view();
       place();
       overlay.classList.add('open');
-      draw();
+      stage.scrollTop = 0;
+      draw('full');
       loadInfo();
     }
 
@@ -2055,21 +2076,23 @@
       draw();
     });
     scaleEl.addEventListener('input', () => {
-      scale = Number(scaleEl.value) / 100;
-      fit();
-    });
-    wrapBtn.addEventListener('click', () => {
-      Store.set({ zoomWrap: !S.zoomWrap });
+      Store.set({ zoomSize: Number(scaleEl.value) });
       view();
-      fit();
+      draw();
     });
+    fitBtn.addEventListener('click', () => {
+      Store.set({ zoomSize: null });
+      view();
+      draw('full');
+    });
+    stage.addEventListener('scroll', positionSel);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     $('#zoomClose').addEventListener('click', close);
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || !isOpen()) return;
       if (sel >= 0) select(-1); else close();
     });
-    window.addEventListener('resize', () => { if (isOpen()) { place(); fit(); } });
+    window.addEventListener('resize', () => { if (isOpen()) { place(); draw('full'); } });
     return { open, refresh };
   })();
 
