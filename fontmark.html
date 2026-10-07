@@ -1724,6 +1724,7 @@
 
     // Scroll the grid to a font's card and flash it (used by the shortlist).
     let flashTimer = 0;
+    let revealRun = 0;
     function reveal(label) {
       const card = [...grid.children].find(c => c.dataset.label === label);
       if (!card) return false;
@@ -1731,20 +1732,45 @@
         $('#searchBox').value = '';
         Store.set({ search: '' });
       }
-      const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      card.scrollIntoView({ block: 'center', behavior: calm ? 'auto' : 'smooth' });
       grid.querySelectorAll('.card.flash').forEach(c => c.classList.remove('flash'));
       card.classList.add('flash');
       clearTimeout(flashTimer);
       flashTimer = setTimeout(() => card.classList.remove('flash'), 1800);
-      // off-screen cards have estimated heights, so a long smooth scroll can
-      // stop short: once it settles, snap the card into view if it missed
-      setTimeout(() => {
-        const r = card.getBoundingClientRect();
-        const w = document.querySelector('.grid-wrap').getBoundingClientRect();
-        const top = Math.max(w.top, 0), bottom = Math.min(w.bottom, window.innerHeight);
-        if (r.top < top || r.bottom > bottom) card.scrollIntoView({ block: 'center' });
-      }, calm ? 0 : 900);
+
+      const run = ++revealRun; // a newer reveal cancels this one's follow-ups
+      const wrap = document.querySelector('.grid-wrap');
+      const view = () => {
+        const w = wrap.getBoundingClientRect();
+        return { top: Math.max(w.top, 0), bottom: Math.min(w.bottom, window.innerHeight) };
+      };
+      const inView = () => {
+        const r = card.getBoundingClientRect(), v = view();
+        return r.top >= v.top - 1 && r.bottom <= v.bottom + 1;
+      };
+      // Off-screen cards only have estimated heights, so the card's real
+      // position isn't known until the ones around it have rendered. Jump to
+      // it, then keep re-centring until it has held still for a few frames.
+      const settle = (tries, still) => {
+        if (run !== revealRun) return;
+        card.scrollIntoView({ block: 'center' });
+        const at = card.getBoundingClientRect().top;
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (run !== revealRun) return;
+          const held = Math.abs(card.getBoundingClientRect().top - at) <= 1 && inView();
+          const n = held ? still + 1 : 0;
+          if (n < 3 && tries > 0) settle(tries - 1, n);
+        }));
+      };
+      const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const r = card.getBoundingClientRect(), v = view();
+      const far = Math.abs((r.top + r.bottom) / 2 - (v.top + v.bottom) / 2) > (v.bottom - v.top) * 1.5;
+      if (calm || far) {
+        settle(20, 0);
+      } else {
+        // a short hop can glide; check it arrived once the glide is over
+        card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        setTimeout(() => { if (run === revealRun && !inView()) settle(20, 0); }, 700);
+      }
       return true;
     }
 
