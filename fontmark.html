@@ -249,12 +249,17 @@
   .tray-row .grip { color: var(--muted); font-size: 12px; cursor: grab; user-select: none; }
   .tray-row .tray-name { flex: 1; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tray-row.unavailable .tray-name { color: var(--muted); font-style: italic; font-family: var(--ui) !important; font-size: 13px; }
-  .tray-row .mv, .tray-row .tray-rm, .tray-row .tray-copy {
+  .tray-row .mv, .tray-row .tray-rm, .tray-row .tray-copy, .tray-row .tray-zoom {
     appearance: none; border: 0; background: transparent; color: var(--muted);
     cursor: pointer; font-size: 12px; padding: 3px 5px; border-radius: 4px;
+    margin-left: -3px; /* five controls share the row: keep them compact */
   }
   .tray-row .tray-rm { font-size: 14px; }
-  .tray-row .mv:hover, .tray-row .tray-rm:hover, .tray-row .tray-copy:hover { color: var(--ink); background: var(--line); }
+  .tray-row .tray-zoom { font-size: 13px; }
+  .tray-row .tray-zoom[hidden] { display: none; }
+  .tray-row .mv:hover, .tray-row .tray-rm:hover, .tray-row .tray-copy:hover, .tray-row .tray-zoom:hover { color: var(--ink); background: var(--line); }
+  /* a card the shortlist just scrolled to */
+  .card.flash { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
   @media (hover: hover) and (pointer: fine) {
     .tray-row .mv { visibility: hidden; }
     .tray-row:hover .mv, .tray-row .mv:focus-visible { visibility: visible; }
@@ -472,7 +477,13 @@
   }
   .col { flex: none; width: calc(25% - 9px); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; display: flex; flex-direction: column; }
   @media (max-width: 900px) { .col { width: calc(50% - 6px); } }
-  .col-label { flex: none; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .col-label { flex: none; display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
+  .col-label .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .col-label .col-zoom {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    font-size: 13px; line-height: 1; cursor: pointer; padding: 3px 5px; border-radius: 4px;
+  }
+  .col-label .col-zoom:hover { color: var(--ink); background: var(--line); }
   .col-sample {
     flex: 1 1 auto;
     padding: 14px 12px;
@@ -657,6 +668,7 @@
     <span class="grip" aria-hidden="true">⠿</span>
     <span class="tray-name"></span>
     <button class="tray-copy" title="Copy font name" aria-label="Copy font name">⧉</button>
+    <button class="tray-zoom" title="Full view" aria-label="Open font in full view">⛶</button>
     <button class="mv up" title="Move up">▲</button>
     <button class="mv down" title="Move down">▼</button>
     <button class="tray-rm" title="Remove from shortlist">×</button>
@@ -1710,7 +1722,33 @@
       Shortlist.toggle(card.dataset.label);
     });
 
-    return { rebuild, updateText, applySearch, syncSelected, applyView, displayText };
+    // Scroll the grid to a font's card and flash it (used by the shortlist).
+    let flashTimer = 0;
+    function reveal(label) {
+      const card = [...grid.children].find(c => c.dataset.label === label);
+      if (!card) return false;
+      if (card.classList.contains('hidden')) { // filtered out by the search box
+        $('#searchBox').value = '';
+        Store.set({ search: '' });
+      }
+      const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      card.scrollIntoView({ block: 'center', behavior: calm ? 'auto' : 'smooth' });
+      grid.querySelectorAll('.card.flash').forEach(c => c.classList.remove('flash'));
+      card.classList.add('flash');
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => card.classList.remove('flash'), 1800);
+      // off-screen cards have estimated heights, so a long smooth scroll can
+      // stop short: once it settles, snap the card into view if it missed
+      setTimeout(() => {
+        const r = card.getBoundingClientRect();
+        const w = document.querySelector('.grid-wrap').getBoundingClientRect();
+        const top = Math.max(w.top, 0), bottom = Math.min(w.bottom, window.innerHeight);
+        if (r.top < top || r.bottom > bottom) card.scrollIntoView({ block: 'center' });
+      }, calm ? 0 : 900);
+      return true;
+    }
+
+    return { rebuild, updateText, applySearch, syncSelected, applyView, displayText, reveal };
   })();
 
   /* ============ (5b) Zoom — pop-out preview over the font grid ============ */
@@ -1727,6 +1765,7 @@
     const fitBtn = $('#zoomFit');
     const MIN = 12, MAX = 500; // slider range, px
     let size = 100;      // text size on show; typing never changes it
+    let sample = null;   // text handed in by the opener (Compare's own sample), else the preview text
     let cur = null;      // font entry on show
     let info = null;     // its parsed swash data, once read
     let text = '';       // the string on show (case applied)
@@ -1815,7 +1854,7 @@
     // the size stays exactly as it is. A slider-set size is never overridden.
     function draw(refit) {
       const fitted = !overflows();
-      text = applyCase(S.previewText.trim() || cur.label);
+      text = applyCase((sample != null ? sample : S.previewText).trim() || cur.label);
       Swash.render(textEl, cur.label, text);
       resetBtn.hidden = !S.swash[cur.label];
       if (S.zoomSize != null) size = S.zoomSize;
@@ -1914,7 +1953,7 @@
       const match = S.fonts.find(f => f.label === label) ||
         S.fonts.find(f => f.label.toLowerCase() === want) ||
         S.fonts.find(f => f.label.toLowerCase() + ' regular' === want);
-      if (match) open(match.label);
+      if (match) open(match.label, sample);
       else { close(); toast('Installed fonts loaded — open “' + label + '” again to set its swashes.'); }
     }
 
@@ -2025,9 +2064,12 @@
       openPicker();
     }
 
-    function open(label) {
+    // `withText`: show this text instead of the preview box's (Compare passes
+    // its own sample so the full view matches the tile it was opened from).
+    function open(label, withText) {
       const font = S.fonts.find(f => f.label === label);
       if (!font) return;
+      sample = typeof withText === 'string' ? withText : null;
       cur = font;
       info = null;
       sel = -1;
@@ -2044,19 +2086,22 @@
     }
 
     function close() {
+      if (!isOpen()) return;
       overlay.classList.remove('open');
       token++;
       sel = -1;
       selEl.hidden = true;
       pickEl.hidden = true;
+      Compare.refresh(); // swash choices made here show in the tiles underneath
     }
 
     // Preview text, case, colour or the font list changed while the popup is up.
-    function refresh() {
+    function refresh(keys) {
       if (!isOpen() || !cur || reloading) return;
+      if (keys && keys.includes('previewText')) sample = null; // typing in the preview box takes over
       const font = S.fonts.find(f => f.label === cur.label);
       if (!font) { close(); return; }
-      if (font !== cur) { open(font.label); return; }
+      if (font !== cur) { open(font.label, sample); return; }
       view();
       select(-1);
       draw();
@@ -2090,10 +2135,11 @@
     $('#zoomClose').addEventListener('click', close);
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || !isOpen()) return;
+      e.stopImmediatePropagation(); // Esc closes this popup only, not Compare beneath it
       if (sel >= 0) select(-1); else close();
     });
     window.addEventListener('resize', () => { if (isOpen()) { place(); draw('full'); } });
-    return { open, refresh };
+    return { open, close, refresh };
   })();
 
   /* ============ (6) Shortlist / tray ============ */
@@ -2155,6 +2201,7 @@
           row.classList.add('unavailable');
           name.textContent = fam + ' — not available on this device';
           row.draggable = false;
+          row.querySelector('.tray-zoom').hidden = true;
         }
         row.querySelector('.up').disabled = i === 0;
         row.querySelector('.down').disabled = i === S.shortlist.length - 1;
@@ -2177,9 +2224,18 @@
       if (!row) return;
       const i = Number(row.dataset.index);
       if (e.target.closest('.tray-copy')) copyName(row.dataset.family);
+      else if (e.target.closest('.tray-zoom')) Zoom.open(row.dataset.family);
       else if (e.target.closest('.tray-rm')) toggle(row.dataset.family);
       else if (e.target.closest('.up') && i > 0) move(i, i - 1);
       else if (e.target.closest('.down') && i < S.shortlist.length - 1) move(i, i + 1);
+      else if (!e.target.closest('button')) {
+        // a plain click on the row: take the grid to that font's card,
+        // clearing away anything that would hide it
+        if (!Grid.reveal(row.dataset.family)) return;
+        Zoom.close();
+        Compare.close();
+        if (window.innerWidth < 1100) $('#tray').classList.remove('open');
+      }
     });
 
     // drag reorder
@@ -2509,10 +2565,22 @@
         col.className = 'col';
         const lb = document.createElement('div');
         lb.className = 'col-label';
-        lb.textContent = fam;
+        const nm = document.createElement('span');
+        nm.className = 'nm';
+        nm.textContent = fam;
+        lb.appendChild(nm);
         const sp = document.createElement('div');
         sp.className = 'col-sample';
         const entry = byLabel.get(fam);
+        if (entry) {
+          const zb = document.createElement('button');
+          zb.className = 'col-zoom';
+          zb.textContent = '⛶';
+          zb.title = 'Full view';
+          zb.setAttribute('aria-label', 'Open ' + fam + ' in full view');
+          zb.addEventListener('click', () => Zoom.open(fam, sample));
+          lb.appendChild(zb);
+        }
         const shown = applyCase(sample || fam);
         col.appendChild(lb);
         col.appendChild(sp);
@@ -2546,7 +2614,7 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) close(); });
     window.addEventListener('resize', () => { if (isOpen()) place(); });
 
-    return { open };
+    return { open, close, refresh: () => { if (isOpen()) renderCols(); } };
   })();
 
   /* ============ (10) Controls wiring ============ */
@@ -2701,7 +2769,7 @@
       $('#btnIsolate').setAttribute('aria-pressed', String(S.isolate));
     }
     if (keys.includes('collections')) Collections.renderList();
-    if (['fonts', 'previewText', 'caseMode', 'negative', 'textColor'].some(k => keys.includes(k))) Zoom.refresh();
+    if (['fonts', 'previewText', 'caseMode', 'negative', 'textColor'].some(k => keys.includes(k))) Zoom.refresh(keys);
   });
 
   function updateStatus() {
